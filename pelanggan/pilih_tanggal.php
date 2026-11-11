@@ -218,11 +218,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </section>
 
 <script>
-let current = new Date();
-current.setDate(1);
+let start = <?php echo json_encode($_SESSION["tanggal_mulai"] ?? null); ?>;
+let end = <?php echo json_encode($_SESSION["tanggal_selesai"] ?? null); ?>;
 
-let start = null;
-let end = null;
+let current = new Date();
+
+if (start) {
+    const tanggalAwal = new Date(start + "T00:00:00");
+    current = new Date(
+        tanggalAwal.getFullYear(),
+        tanggalAwal.getMonth(),
+        1
+    );
+} else {
+    current.setDate(1);
+}
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -341,6 +351,7 @@ document.getElementById("dateForm").addEventListener("submit", (event) => {
     }
 });
 
+updateSelection();
 renderCalendar();
 </script>
 

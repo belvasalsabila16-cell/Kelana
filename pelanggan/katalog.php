@@ -2,6 +2,39 @@
 <?php
 session_start();
 include "../config/database.php";
+// Inisialisasi keranjang jika belum ada
+if (!isset($_SESSION['keranjang'])) {
+    $_SESSION['keranjang'] = [];
+}
+
+// Proses tambah barang ke keranjang
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["tambah_keranjang"])) {
+
+    $id_barang = (int) $_POST["id_barang"];
+    $jumlah = (int) $_POST["jumlah"];
+
+    $cekBarang = mysqli_query($conn, "
+        SELECT * FROM barang WHERE id_barang = $id_barang
+    ");
+
+    $barang = mysqli_fetch_assoc($cekBarang);
+
+    if ($barang && $jumlah > 0 && $jumlah <= $barang["stok"]) {
+
+        if (isset($_SESSION["keranjang"][$id_barang])) {
+            $jumlahBaru = $_SESSION["keranjang"][$id_barang] + $jumlah;
+
+            if ($jumlahBaru <= $barang["stok"]) {
+                $_SESSION["keranjang"][$id_barang] = $jumlahBaru;
+            }
+        } else {
+            $_SESSION["keranjang"][$id_barang] = $jumlah;
+        }
+    }
+
+    header("Location: katalog.php");
+    exit;
+}
 
 if (empty($_SESSION['tanggal_mulai']) || empty($_SESSION['tanggal_selesai'])) {
     header("Location: pilih_tanggal.php");
@@ -96,6 +129,9 @@ $query = mysqli_query($conn, "
     <div class="menu">
         <a href="../index.php">Beranda</a>
         <a href="katalog.php">Katalog</a>
+        <a href="keranjang.php">
+            Keranjang (<?php echo count($_SESSION['keranjang'] ?? []); ?>)
+        </a>
         <a href="#">Tentang Kami</a>
         <a href="#">FAQ</a>
     </div>
@@ -136,6 +172,30 @@ $query = mysqli_query($conn, "
    class="detail-btn">
     Lihat Detail
 </a>
+
+<form method="POST" style="margin-top: 15px;">
+
+    <input type="hidden" name="id_barang"
+           value="<?php echo $barang['id_barang']; ?>">
+
+    <label>Jumlah:</label>
+
+    <input type="number"
+           name="jumlah"
+           value="1"
+           min="1"
+           max="<?php echo $barang['stok']; ?>"
+           required
+           style="width: 60px; padding: 8px;">
+
+    <button type="submit"
+            name="tambah_keranjang"
+            class="detail-btn"
+            style="border: none; cursor: pointer; margin-top: 10px;">
+        + Tambah ke Keranjang
+    </button>
+
+</form>
 
             </div>
 
