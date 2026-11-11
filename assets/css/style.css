@@ -1,4 +1,6 @@
 
+/* ===== PENGATURAN DASAR ===== */
+
 * {
     margin: 0;
     padding: 0;
@@ -10,6 +12,8 @@ body {
     background: #f5f3ed;
     color: #263b2d;
 }
+
+/* ===== NAVBAR ===== */
 
 .navbar {
     display: flex;
@@ -29,13 +33,18 @@ body {
     margin: 0 15px;
 }
 
-.login, .btn {
+/* ===== TOMBOL ===== */
+
+.login,
+.btn {
     background: #31583c;
     color: white;
     padding: 12px 22px;
     text-decoration: none;
     border-radius: 6px;
 }
+
+/* ===== HERO ===== */
 
 .hero {
     min-height: 500px;
@@ -52,6 +61,8 @@ body {
     margin-bottom: 30px;
     font-size: 18px;
 }
+
+/* ===== PERIODE SEWA ===== */
 
 .rental-period {
     display: flex;
@@ -70,4 +81,350 @@ body {
 .rental-period h3 {
     margin: 5px 0 0;
     color: #344b35;
+}
+
+/* ===== MENU AKUN KELANA ===== */
+
+.account-dropdown {
+    position: relative;
+    margin-left: 15px;
+}
+
+.account-dropdown summary {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    list-style: none;
+    padding: 6px 9px;
+    border-radius: 25px;
+    transition: background 0.25s ease;
+}
+
+.account-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.account-dropdown summary:hover {
+    background: #f1f4ed;
+}
+
+/* Ikon profil */
+
+.profile-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e8eee5;
+    color: #31583c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-circle svg {
+    width: 15px;
+    height: 15px;
+}
+
+.account-label {
+    color: #263b2d;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.account-dropdown .arrow {
+    color: #777;
+    font-size: 13px;
+    transition: transform 0.25s ease;
+}
+
+.account-dropdown[open] .arrow {
+    transform: rotate(180deg);
+}
+
+/* ===== DROPDOWN ===== */
+
+.dropdown-content {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 155px;
+    background: #fff;
+    border: 1px solid #eaece7;
+    border-radius: 9px;
+    box-shadow: 0 6px 18px rgba(38, 59, 45, 0.10);
+    padding: 5px;
+    z-index: 1000;
+    animation: dropdownFade 0.2s ease;
+}
+
+@keyframes dropdownFade {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dropdown-content a {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 10px;
+    text-decoration: none;
+    font-size: 12px;
+    color: #344b35;
+    border-radius: 6px;
+    transition: 0.2s;
+}
+
+.dropdown-content a:hover {
+    background: #f1f4ed;
+}
+
+.dropdown-arrow {
+    font-size: 15px;
+    color: #999;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: #eee;
+    margin: 2px 6px;
+}
+
+/* ===== TOMBOL KELUAR ===== */
+
+.dropdown-content .logout-link {
+    color: #c65b52;
+}
+
+.dropdown-content .logout-link:hover {
+    background: #fff1ef;
+}
+
+
+/* ===== HALAMAN PROFIL ===== */
+
+.profile-container {
+    max-width: 850px;
+    margin: 55px auto;
+    padding: 0 20px;
+}
+
+.profile-heading {
+    margin-bottom: 25px;
+}
+
+.profile-heading h1 {
+    color: #31583c;
+    font-size: 30px;
+    margin-bottom: 8px;
+}
+
+.profile-heading p {
+    color: #777;
+    font-size: 14px;
+}
+
+.profile-card {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.04);
+}
+
+.profile-top {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding-bottom: 22px;
+    margin-bottom: 25px;
+    border-bottom: 1px solid #eee;
+}
+
+.profile-avatar {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: #e8eee5;
+    color: #31583c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-avatar svg {
+    width: 29px;
+    height: 29px;
+}
+
+.profile-top h3 {
+    color: #31583c;
+    margin-bottom: 5px;
+}
+
+.profile-top p {
+    font-size: 13px;
+    color: #888;
+}
+
+.profile-form-group {
+    margin-bottom: 19px;
+}
+
+.profile-form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #344b35;
+    margin-bottom: 8px;
+}
+
+.profile-form-group input,
+.profile-form-group textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid #ddd;
+    border-radius: 7px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+    outline: none;
+}
+
+.profile-form-group input:focus,
+.profile-form-group textarea:focus {
+    border-color: #31583c;
+}
+
+.profile-form-group textarea {
+    resize: vertical;
+}
+
+.profile-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.profile-back,
+.profile-save {
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+}
+
+.profile-back {
+    color: #31583c;
+    background: #f1f4ed;
+}
+
+.profile-save {
+    color: white;
+    background: #31583c;
+}
+
+.profile-save:hover {
+    background: #24452e;
+}
+
+.profile-message {
+    padding: 12px 15px;
+    border-radius: 7px;
+    margin-bottom: 20px;
+    font-size: 13px;
+}
+
+.profile-message.success {
+    background: #e8f3e8;
+    color: #31583c;
+}
+
+.profile-message.error {
+    background: #fff0ee;
+    color: #c65b52;
+}
+
+@media (max-width: 600px) {
+    .profile-container {
+        margin: 30px auto;
+    }
+
+    .profile-card {
+        padding: 20px;
+    }
+
+    .profile-actions {
+        flex-direction: column-reverse;
+    }
+
+    .profile-actions a,
+    .profile-actions button {
+        text-align: center;
+        width: 100%;
+    }
+}
+
+
+/* ===== BAGIAN KEAMANAN AKUN ===== */
+
+.profile-section-title {
+    color: #31583c;
+    font-size: 18px;
+    margin-bottom: 18px;
+}
+
+.profile-section-divider {
+    height: 1px;
+    background: #eaece7;
+    margin: 30px 0;
+}
+
+.password-description {
+    font-size: 13px;
+    color: #888;
+    margin-top: -10px;
+    margin-bottom: 22px;
+}
+
+
+/* ===== TOMBOL LIHAT PASSWORD ===== */
+
+.password-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.password-wrapper input {
+    padding-right: 45px !important;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+}
+
+.toggle-password svg {
+    width: 19px;
+    height: 19px;
 }

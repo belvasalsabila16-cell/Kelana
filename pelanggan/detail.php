@@ -87,8 +87,8 @@ if (!$barang) {
     <div class="menu">
         <a href="../index.php">Beranda</a>
         <a href="katalog.php">Katalog</a>
-        <a href="#">Tentang Kami</a>
-        <a href="#">FAQ</a>
+        <a href="tentang.php">Tentang Kami</a>
+        <a href="faq.php">FAQ</a>
     </div>
 
     <a href="../auth/login.php" class="login">Masuk</a>

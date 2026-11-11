@@ -3,31 +3,48 @@
 session_start();
 include "../config/database.php";
 
+// Aturan penyewaan Kelana
+$maksHariSewa = 14;
+$toleransiPengembalian = 2;
+
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $mulai = $_POST["tanggal_mulai"] ?? "";
     $selesai = $_POST["tanggal_selesai"] ?? "";
 
-    $awal = DateTime::createFromFormat("Y-m-d", $mulai);
-    $akhir = DateTime::createFromFormat("Y-m-d", $selesai);
+    $awal = DateTime::createFromFormat("!Y-m-d", $mulai);
+    $akhir = DateTime::createFromFormat("!Y-m-d", $selesai);
     $hariIni = new DateTime("today");
 
     if (
-        $awal && $akhir &&
-        $awal->format("Y-m-d") === $mulai &&
-        $akhir->format("Y-m-d") === $selesai &&
-        $awal >= $hariIni &&
-        $akhir >= $awal
+        !$awal || !$akhir ||
+        $awal->format("Y-m-d") !== $mulai ||
+        $akhir->format("Y-m-d") !== $selesai ||
+        $awal < $hariIni ||
+        $akhir < $awal
     ) {
-        $_SESSION["tanggal_mulai"] = $mulai;
-        $_SESSION["tanggal_selesai"] = $selesai;
-
-        header("Location: katalog.php");
-        exit;
-    } else {
         $error = "Tanggal penyewaan tidak valid.";
+    } else {
+        // Durasi dihitung termasuk tanggal mulai dan selesai
+        $durasiSewa = $awal->diff($akhir)->days + 1;
+
+        if ($durasiSewa > $maksHariSewa) {
+            $error = "Maksimal penyewaan Kelana adalah 14 hari.";
+        } else {
+            // Batas pengembalian: 2 hari setelah tanggal selesai
+            $batasPengembalian = clone $akhir;
+            $batasPengembalian->modify("+{$toleransiPengembalian} days");
+
+            $_SESSION["tanggal_mulai"] = $mulai;
+            $_SESSION["tanggal_selesai"] = $selesai;
+            $_SESSION["batas_pengembalian"] = $batasPengembalian->format("Y-m-d");
+
+            header("Location: katalog.php");
+            exit;
+        }
     }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="id">
@@ -167,8 +184,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <div class="menu">
         <a href="../index.php">Beranda</a>
         <a href="katalog.php">Katalog</a>
-        <a href="#">Tentang Kami</a>
-        <a href="#">FAQ</a>
+        <a href="tentang.php">Tentang Kami</a>
+        <a href="faq.php">FAQ</a>
     </div>
     <a href="../auth/login.php" class="login">Masuk</a>
 </nav>
@@ -186,6 +203,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         </div>
         <span>📅</span>
     </div>
+
+
+<div style="background:#f0f5ef; padding:15px; border-radius:8px; margin-bottom:20px;">
+    <strong>Informasi Penyewaan Kelana</strong>
+    <p style="margin:8px 0;">• Maksimal durasi sewa: 14 hari.</p>
+    <p style="margin:8px 0;">• Toleransi pengembalian: 2 hari setelah tanggal selesai sewa.</p>
+    <p style="margin:8px 0;">• Denda berlaku jika melewati batas toleransi.</p>
+</div>
+
+<div id="rentalInfo" style="margin-bottom:15px; color:#31583c;"></div>
+
 
     <div class="calendar">
         <div class="calendar-header">
@@ -218,8 +246,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </section>
 
 <script>
+
 let start = <?php echo json_encode($_SESSION["tanggal_mulai"] ?? null); ?>;
 let end = <?php echo json_encode($_SESSION["tanggal_selesai"] ?? null); ?>;
+
+const MAKS_HARI = 14;
+const TOLERANSI = 2;
 
 let current = new Date();
 
@@ -245,6 +277,23 @@ function formatDate(date) {
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
+}
+
+function formatIndonesia(dateString) {
+    const date = new Date(dateString + "T00:00:00");
+
+    return date.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+    });
+}
+
+function hitungDurasi(tanggalAwal, tanggalAkhir) {
+    const awal = new Date(tanggalAwal + "T00:00:00");
+    const akhir = new Date(tanggalAkhir + "T00:00:00");
+
+    return Math.round((akhir - awal) / 86400000) + 1;
 }
 
 function renderCalendar() {
@@ -277,6 +326,16 @@ function renderCalendar() {
             button.disabled = true;
         }
 
+        // Batasi pilihan tanggal selesai maksimal 14 hari
+        if (start && !end) {
+            const batasTanggal = new Date(start + "T00:00:00");
+            batasTanggal.setDate(batasTanggal.getDate() + MAKS_HARI - 1);
+
+            if (date > batasTanggal) {
+                button.disabled = true;
+            }
+        }
+
         if (start && key === start) {
             button.classList.add("selected");
         }
@@ -304,6 +363,13 @@ function renderCalendar() {
             } else if (key < start) {
                 start = key;
             } else {
+                const durasi = hitungDurasi(start, key);
+
+                if (durasi > MAKS_HARI) {
+                    alert("Maksimal penyewaan adalah 14 hari.");
+                    return;
+                }
+
                 end = key;
             }
 
@@ -321,15 +387,38 @@ function updateSelection() {
 
     const text = document.getElementById("dateText");
     const submit = document.getElementById("submitBtn");
+    const info = document.getElementById("rentalInfo");
 
     if (start && end) {
-        text.textContent = start + " – " + end;
+        const durasi = hitungDurasi(start, end);
+
+        const batas = new Date(end + "T00:00:00");
+        batas.setDate(batas.getDate() + TOLERANSI);
+
+        const tanggalBatas = formatDate(batas);
+
+        text.textContent =
+            formatIndonesia(start) + " – " + formatIndonesia(end);
+
+        info.innerHTML = `
+            <strong>Durasi penyewaan:</strong> ${durasi} hari<br>
+            <strong>Batas pengembalian:</strong>
+            ${formatIndonesia(tanggalBatas)}<br>
+            <small>Pengembalian sampai tanggal tersebut tidak dikenakan denda.</small>
+        `;
+
         submit.disabled = false;
+
     } else if (start) {
-        text.textContent = "Mulai: " + start + " (pilih tanggal selesai)";
+        text.textContent = "Mulai: " + formatIndonesia(start) +
+            " (pilih tanggal selesai)";
+
+        info.textContent = "Silakan pilih tanggal selesai maksimal 14 hari dari tanggal mulai.";
         submit.disabled = true;
+
     } else {
         text.textContent = "Pilih tanggal mulai dan selesai";
+        info.textContent = "";
         submit.disabled = true;
     }
 }
@@ -345,14 +434,15 @@ document.getElementById("next").addEventListener("click", () => {
 });
 
 document.getElementById("dateForm").addEventListener("submit", (event) => {
-    if (!start || !end) {
+    if (!start || !end || hitungDurasi(start, end) > MAKS_HARI) {
         event.preventDefault();
-        alert("Silakan pilih tanggal mulai dan selesai.");
+        alert("Silakan pilih tanggal yang valid. Maksimal sewa 14 hari.");
     }
 });
 
 updateSelection();
 renderCalendar();
+
 </script>
 
 </body>
