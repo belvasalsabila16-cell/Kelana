@@ -9,7 +9,17 @@
 
 body {
     font-family: Arial, sans-serif;
-    background: #f5f3ed;
+    background-color: #f5f3ed;
+    background-image:
+        linear-gradient(
+            rgba(245, 243, 237, 0.45),
+            rgba(245, 243, 237, 0.45)
+        ),
+        url("/Kelana/assets/images/background-camping.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     color: #263b2d;
 }
 
@@ -19,13 +29,37 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 22px 7%;
-    background: white;
+    padding: 12px 7%;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
 }
 
 .navbar h2 {
     color: #31583c;
 }
+
+/* ===== LOGO KELANA ===== */
+
+.navbar .logo-link {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+
+.navbar .logo-link img {
+    width: 220px;
+    height: 100px;
+    object-fit: contain;
+    display: block;
+    transition: transform 0.2s ease;
+}
+
+.navbar .logo-link:hover img {
+    transform: scale(1.04);
+}
+
+/* ===== MENU NAVBAR ===== */
 
 .menu a {
     text-decoration: none;
@@ -49,7 +83,7 @@ body {
 .hero {
     min-height: 500px;
     padding: 130px 10%;
-    background: #dce5d8;
+    background: rgba(220, 229, 216, 0.65);
 }
 
 .hero h1 {
@@ -68,7 +102,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: #f1f4ed;
+    background-color: rgba(241, 244, 237, 0.90);
     padding: 20px 30px;
     margin: 25px 5%;
     border-radius: 10px;
@@ -208,7 +242,6 @@ body {
     background: #fff1ef;
 }
 
-
 /* ===== HALAMAN PROFIL ===== */
 
 .profile-container {
@@ -233,7 +266,7 @@ body {
 }
 
 .profile-card {
-    background: white;
+    background: rgba(255, 255, 255, 0.94);
     border-radius: 12px;
     padding: 30px;
     box-shadow: 0 5px 20px rgba(0,0,0,0.04);
@@ -355,27 +388,6 @@ body {
     color: #c65b52;
 }
 
-@media (max-width: 600px) {
-    .profile-container {
-        margin: 30px auto;
-    }
-
-    .profile-card {
-        padding: 20px;
-    }
-
-    .profile-actions {
-        flex-direction: column-reverse;
-    }
-
-    .profile-actions a,
-    .profile-actions button {
-        text-align: center;
-        width: 100%;
-    }
-}
-
-
 /* ===== BAGIAN KEAMANAN AKUN ===== */
 
 .profile-section-title {
@@ -397,16 +409,19 @@ body {
     margin-bottom: 22px;
 }
 
-
 /* ===== TOMBOL LIHAT PASSWORD ===== */
 
 .password-wrapper {
     position: relative;
     width: 100%;
+    margin: 8px 0 18px;
 }
 
 .password-wrapper input {
-    padding-right: 45px !important;
+    width: 100%;
+    padding: 12px 45px 12px 12px;
+    margin: 0;
+    box-sizing: border-box;
 }
 
 .toggle-password {
@@ -425,6 +440,65 @@ body {
 }
 
 .toggle-password svg {
-    width: 19px;
-    height: 19px;
+    width: 20px;
+    height: 20px;
+}
+
+/* ===== TOMBOL KEMBALI KE PANEL ADMIN ===== */
+
+.admin-back-link {
+    display: inline-block;
+    background: #31583c;
+    color: white !important;
+    padding: 10px 16px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: .2s;
+    white-space: nowrap;
+}
+
+.admin-back-link:hover {
+    background: #25452e;
+}
+
+/* ===== KARTU KONTEN ===== */
+
+.card,
+.product-card,
+.faq-item {
+    background-color: rgba(255, 255, 255, 0.94);
+}
+
+/* ===== RESPONSIVE ===== */
+
+@media (max-width: 600px) {
+
+    body {
+        background-attachment: scroll;
+    }
+
+    .navbar .logo-link img {
+        width: 120px;
+        height: 55px;
+    }
+
+    .profile-container {
+        margin: 30px auto;
+    }
+
+    .profile-card {
+        padding: 20px;
+    }
+
+    .profile-actions {
+        flex-direction: column-reverse;
+    }
+
+    .profile-actions a,
+    .profile-actions button {
+        text-align: center;
+        width: 100%;
+    }
 }

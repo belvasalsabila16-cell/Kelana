@@ -41,10 +41,10 @@ if ($tanggalAwal !== "" && $tanggalAkhir !== "") {
         $akhir->format("Y-m-d") === $tanggalAkhir &&
         $tanggalAwal <= $tanggalAkhir
     ) {
-        $filter = " WHERE DATE(s.tanggal_booking) BETWEEN '" .
-            mysqli_real_escape_string($conn, $tanggalAwal) .
-            "' AND '" .
-            mysqli_real_escape_string($conn, $tanggalAkhir) . "'";
+        $awalAman = mysqli_real_escape_string($conn, $tanggalAwal);
+        $akhirAman = mysqli_real_escape_string($conn, $tanggalAkhir);
+
+        $filter = " WHERE DATE(s.tanggal_booking) BETWEEN '$awalAman' AND '$akhirAman'";
     } else {
         $tanggalAwal = "";
         $tanggalAkhir = "";
@@ -64,6 +64,7 @@ $sqlRingkasan = "
         COALESCE(SUM(
             CASE
                 WHEN s.status_pembayaran = 'Lunas'
+                AND s.status != 'Dibatalkan'
                 THEN s.total_harga
                 ELSE 0
             END
@@ -72,37 +73,26 @@ $sqlRingkasan = "
         COALESCE(SUM(
             CASE
                 WHEN s.status_pembayaran = 'Belum Bayar'
+                AND s.status != 'Dibatalkan'
                 THEN s.total_harga
                 ELSE 0
             END
         ), 0) AS belum_dibayar,
 
         SUM(
-            CASE
-                WHEN s.status = 'Dipesan' THEN 1
-                ELSE 0
-            END
+            CASE WHEN s.status = 'Dipesan' THEN 1 ELSE 0 END
         ) AS jumlah_dipesan,
 
         SUM(
-            CASE
-                WHEN s.status = 'Diambil' THEN 1
-                ELSE 0
-            END
+            CASE WHEN s.status = 'Diambil' THEN 1 ELSE 0 END
         ) AS jumlah_diambil,
 
         SUM(
-            CASE
-                WHEN s.status = 'Dikembalikan' THEN 1
-                ELSE 0
-            END
+            CASE WHEN s.status = 'Dikembalikan' THEN 1 ELSE 0 END
         ) AS jumlah_dikembalikan,
 
         SUM(
-            CASE
-                WHEN s.status = 'Dibatalkan' THEN 1
-                ELSE 0
-            END
+            CASE WHEN s.status = 'Dibatalkan' THEN 1 ELSE 0 END
         ) AS jumlah_dibatalkan
 
     FROM sewa s
@@ -113,16 +103,37 @@ $hasilRingkasan = mysqli_query($conn, $sqlRingkasan);
 $ringkasan = mysqli_fetch_assoc($hasilRingkasan);
 
 // ==========================================
-// 4. DAFTAR TRANSAKSI
+// 4. DAFTAR TRANSAKSI DAN RINCIAN DISKON
 // ==========================================
 $sqlTransaksi = "
     SELECT
         s.*,
         u.nama,
-        u.email
+        u.email,
+
+        COALESCE(detail.total_sebelum_diskon, 0) AS total_sebelum_diskon,
+
+        GREATEST(
+            COALESCE(detail.total_sebelum_diskon, 0) - s.total_harga,
+            0
+        ) AS nominal_diskon
+
     FROM sewa s
-    LEFT JOIN user u ON s.id_user = u.id_user
+
+    LEFT JOIN user u
+        ON s.id_user = u.id_user
+
+    LEFT JOIN (
+        SELECT
+            id_sewa,
+            SUM(subtotal) AS total_sebelum_diskon
+        FROM detail_sewa
+        GROUP BY id_sewa
+    ) detail
+        ON s.id_sewa = detail.id_sewa
+
     $filter
+
     ORDER BY s.tanggal_booking DESC, s.id_sewa DESC
 ";
 
@@ -147,6 +158,8 @@ function e($nilai) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Laporan - Kelana</title>
 
+    <link rel="stylesheet" href="../assets/css/style.css">
+
     <style>
         * {
             box-sizing: border-box;
@@ -156,43 +169,64 @@ function e($nilai) {
         }
 
         body {
-            background: #f4f6f4;
+            background: transparent;
             color: #26352c;
         }
 
+        /* SIDEBAR */
         .sidebar {
-            width: 240px;
+            width: 245px;
             height: 100vh;
-            background: #244b38;
+            background: #31583c;
             color: white;
             position: fixed;
+            top: 0;
+            left: 0;
             padding: 28px 18px;
+            overflow-y: auto;
+            z-index: 100;
         }
 
         .logo {
-            font-size: 25px;
-            font-weight: bold;
-            margin: 0 12px 35px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
         }
 
-        .sidebar a {
+        .logo a {
+            display: inline-block;
+        }
+
+        .logo img {
+            width: 190px;
+            height: 90px;
+            object-fit: contain;
             display: block;
-            color: white;
+        }
+
+        .sidebar a.menu-link {
+            display: block;
+            color: #e8efe7;
             text-decoration: none;
             padding: 13px 14px;
             border-radius: 7px;
             margin-bottom: 7px;
             font-size: 14px;
+            transition: 0.2s;
         }
 
-        .sidebar a:hover,
-        .sidebar a.aktif {
-            background: #3d6a50;
+        .sidebar a.menu-link:hover,
+        .sidebar a.menu-link.aktif {
+            background: #456e4f;
+            color: white;
         }
 
+        /* KONTEN UTAMA */
         .main {
-            margin-left: 240px;
+            margin-left: 245px;
             padding: 35px;
+            min-height: 100vh;
         }
 
         .header {
@@ -202,26 +236,30 @@ function e($nilai) {
         .header h1 {
             font-size: 27px;
             margin-bottom: 8px;
+            color: #26352d;
         }
 
         .header p {
-            color: #718078;
+            color: #77847b;
             font-size: 14px;
         }
 
+        /* CARD */
         .card {
             background: white;
             padding: 24px;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
             margin-bottom: 22px;
         }
 
         .card h2 {
             font-size: 18px;
             margin-bottom: 18px;
+            color: #26352d;
         }
 
+        /* FILTER */
         .filter-form {
             display: flex;
             align-items: end;
@@ -234,6 +272,7 @@ function e($nilai) {
             font-size: 13px;
             font-weight: bold;
             margin-bottom: 7px;
+            color: #405448;
         }
 
         .filter-form input {
@@ -241,6 +280,12 @@ function e($nilai) {
             border: 1px solid #d6ded8;
             border-radius: 7px;
             min-width: 190px;
+            color: #26352c;
+        }
+
+        .filter-form input:focus {
+            outline: none;
+            border-color: #456e4f;
         }
 
         button,
@@ -255,8 +300,12 @@ function e($nilai) {
         }
 
         .btn-filter {
-            background: #315d43;
+            background: #31583c;
             color: white;
+        }
+
+        .btn-filter:hover {
+            background: #456e4f;
         }
 
         .btn-reset {
@@ -264,6 +313,11 @@ function e($nilai) {
             color: #34483a;
         }
 
+        .btn-reset:hover {
+            background: #dce4dd;
+        }
+
+        /* RINGKASAN */
         .ringkasan {
             display: grid;
             grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -275,21 +329,22 @@ function e($nilai) {
             background: white;
             padding: 22px;
             border-radius: 11px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
         }
 
         .stat p {
-            color: #758179;
+            color: #77847b;
             font-size: 13px;
             margin-bottom: 12px;
         }
 
         .stat h3 {
             font-size: 22px;
-            color: #28523a;
+            color: #31583c;
             overflow-wrap: anywhere;
         }
 
+        /* STATUS BOOKING */
         .status-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -297,25 +352,27 @@ function e($nilai) {
         }
 
         .status-item {
-            background: #f5f8f5;
+            background: #f1f5ef;
             padding: 15px;
             border-radius: 8px;
         }
 
         .status-item p {
-            color: #718078;
+            color: #77847b;
             font-size: 13px;
             margin-bottom: 8px;
         }
 
         .status-item h3 {
             font-size: 22px;
+            color: #31583c;
         }
 
+        /* TABEL */
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 950px;
+            min-width: 1250px;
         }
 
         th,
@@ -328,7 +385,11 @@ function e($nilai) {
         }
 
         th {
-            background: #f5f8f5;
+            background: #f1f5ef;
+            color: #31583c;
+        }
+
+        td {
             color: #405448;
         }
 
@@ -342,6 +403,11 @@ function e($nilai) {
             font-weight: bold;
         }
 
+        .diskon {
+            color: #287442;
+            font-weight: bold;
+        }
+
         .kosong {
             text-align: center;
             padding: 25px;
@@ -349,13 +415,14 @@ function e($nilai) {
         }
 
         .catatan {
-            color: #78837b;
+            color: #77847b;
             font-size: 12px;
             margin-top: 14px;
             line-height: 1.6;
         }
 
-        @media(max-width: 1050px) {
+        /* RESPONSIVE */
+        @media (max-width: 1050px) {
             .ringkasan {
                 grid-template-columns: repeat(2, 1fr);
             }
@@ -365,11 +432,21 @@ function e($nilai) {
             }
         }
 
-        @media(max-width: 800px) {
+        @media (max-width: 800px) {
             .sidebar {
                 width: 100%;
                 height: auto;
                 position: relative;
+                padding: 18px;
+            }
+
+            .logo {
+                margin-bottom: 15px;
+            }
+
+            .logo img {
+                width: 150px;
+                height: 75px;
             }
 
             .main {
@@ -378,36 +455,61 @@ function e($nilai) {
                 overflow-x: auto;
             }
         }
+
+        @media (max-width: 500px) {
+            .ringkasan,
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .filter-form {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .filter-form input {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 
 <body>
 
 <aside class="sidebar">
-    <div class="logo">KELANA.</div>
 
-    <a href="dashboard.php">Dashboard</a>
-    <a href="barang.php">Data Barang</a>
-    <a href="kategori.php">Kategori</a>
-    <a href="booking.php">Data Booking</a>
-    <a href="pengembalian.php">Pengembalian</a>
-    <a href="faq.php">FAQ</a>
-    <a href="laporan.php" class="aktif">Laporan</a>
-    <a href="../index.php">Lihat Website</a>
+    <div class="logo">
+        <a href="../index.php">
+            <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+        </a>
+    </div>
+
+    <a href="dashboard.php" class="menu-link">Dashboard</a>
+    <a href="barang.php" class="menu-link">Data Barang</a>
+    <a href="kategori.php" class="menu-link">Kategori</a>
+    <a href="member.php" class="menu-link">Manajemen Member</a>
+    <a href="booking.php" class="menu-link">Data Booking</a>
+    <a href="pengembalian.php" class="menu-link">Pengembalian</a>
+    <a href="faq.php" class="menu-link">FAQ</a>
+    <a href="laporan.php" class="menu-link aktif">Laporan</a>
+    <a href="../index.php" class="menu-link">Lihat Website</a>
+
 </aside>
 
 <main class="main">
 
     <div class="header">
         <h1>Laporan Penyewaan</h1>
-        <p>Ringkasan transaksi dan pendapatan penyewaan Kelana.</p>
+        <p>Ringkasan transaksi, diskon, dan pendapatan penyewaan Kelana.</p>
     </div>
 
     <!-- FILTER TANGGAL -->
     <section class="card">
+
         <h2>Filter Periode Booking</h2>
 
         <form method="GET" class="filter-form">
+
             <div>
                 <label>Tanggal Awal</label>
                 <input
@@ -433,7 +535,9 @@ function e($nilai) {
             <a href="laporan.php" class="btn btn-reset">
                 Reset
             </a>
+
         </form>
+
     </section>
 
     <!-- RINGKASAN -->
@@ -467,9 +571,11 @@ function e($nilai) {
 
     <!-- STATUS BOOKING -->
     <section class="card">
+
         <h2>Status Penyewaan</h2>
 
         <div class="status-grid">
+
             <div class="status-item">
                 <p>Dipesan</p>
                 <h3><?= (int) $ringkasan["jumlah_dipesan"] ?></h3>
@@ -489,15 +595,20 @@ function e($nilai) {
                 <p>Dibatalkan</p>
                 <h3><?= (int) $ringkasan["jumlah_dibatalkan"] ?></h3>
             </div>
+
         </div>
+
     </section>
 
     <!-- RINCIAN TRANSAKSI -->
     <section class="card">
+
         <h2>Rincian Transaksi</h2>
 
-        <div style="overflow-x:auto;">
+        <div style="overflow-x: auto;">
+
             <table>
+
                 <thead>
                     <tr>
                         <th>No.</th>
@@ -505,18 +616,24 @@ function e($nilai) {
                         <th>Nama Pelanggan</th>
                         <th>Tanggal Booking</th>
                         <th>Masa Sewa</th>
-                        <th>Total Harga</th>
+                        <th>Total Sebelum Diskon</th>
+                        <th>Diskon</th>
+                        <th>Total Setelah Diskon</th>
                         <th>Pembayaran</th>
                         <th>Status Sewa</th>
                     </tr>
                 </thead>
 
                 <tbody>
-                    <?php if (mysqli_num_rows($daftarTransaksi) > 0): ?>
+
+                    <?php if ($daftarTransaksi && mysqli_num_rows($daftarTransaksi) > 0): ?>
+
                         <?php $no = 1; ?>
 
                         <?php while ($row = mysqli_fetch_assoc($daftarTransaksi)): ?>
+
                             <tr>
+
                                 <td><?= $no++ ?></td>
 
                                 <td><?= e($row["kode_sewa"]) ?></td>
@@ -534,37 +651,61 @@ function e($nilai) {
                                 </td>
 
                                 <td>
-                                    <?= date("d-m-Y", strtotime($row["tanggal_mulai"])) ?>
+                                    <?= !empty($row["tanggal_mulai"])
+                                        ? date("d-m-Y", strtotime($row["tanggal_mulai"]))
+                                        : "-" ?>
                                     s.d.
-                                    <?= date("d-m-Y", strtotime($row["tanggal_selesai"])) ?>
+                                    <?= !empty($row["tanggal_selesai"])
+                                        ? date("d-m-Y", strtotime($row["tanggal_selesai"]))
+                                        : "-" ?>
                                 </td>
 
-                                <td><?= rupiah($row["total_harga"]) ?></td>
+                                <td>
+                                    <?= rupiah($row["total_sebelum_diskon"]) ?>
+                                </td>
+
+                                <td class="diskon">
+                                    <?= rupiah($row["nominal_diskon"]) ?>
+                                </td>
+
+                                <td>
+                                    <strong><?= rupiah($row["total_harga"]) ?></strong>
+                                </td>
 
                                 <td class="<?= $row["status_pembayaran"] === "Lunas" ? "lunas" : "belum" ?>">
                                     <?= e($row["status_pembayaran"]) ?>
                                 </td>
 
                                 <td><?= e($row["status"]) ?></td>
+
                             </tr>
+
                         <?php endwhile; ?>
 
                     <?php else: ?>
+
                         <tr>
-                            <td colspan="8" class="kosong">
+                            <td colspan="10" class="kosong">
                                 Belum ada transaksi pada periode ini.
                             </td>
                         </tr>
+
                     <?php endif; ?>
+
                 </tbody>
+
             </table>
+
         </div>
 
         <p class="catatan">
             * Periode filter menggunakan tanggal booking.
-            Total pendapatan hanya menghitung transaksi dengan status pembayaran Lunas.
+            Total pendapatan hanya menghitung transaksi berstatus Lunas dan tidak dibatalkan.
+            Total sebelum diskon dihitung dari penjumlahan subtotal barang.
+            Nominal diskon dihitung dari selisih total sebelum diskon dengan total pembayaran tersimpan.
             Transaksi yang dibatalkan tetap ditampilkan dalam rincian dan jumlah booking.
         </p>
+
     </section>
 
 </main>

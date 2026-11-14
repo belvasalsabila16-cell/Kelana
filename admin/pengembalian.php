@@ -78,9 +78,15 @@ if (
 
     } else {
 
+        // Ambil data penyewaan dan pelanggan
         $stmtCek = mysqli_prepare(
             $conn,
-            "SELECT tanggal_mulai, tanggal_selesai, status
+            "SELECT
+                id_user,
+                kode_sewa,
+                tanggal_mulai,
+                tanggal_selesai,
+                status
              FROM sewa
              WHERE id_sewa = ?"
         );
@@ -102,17 +108,12 @@ if (
 
             $pesan = "Barang hanya dapat dikembalikan jika status penyewaan Diambil.";
 
-        } elseif ($tanggalKembali < $dataSewa["tanggal_mulai"]) {
-
-            $pesan = "Tanggal pengembalian tidak boleh sebelum tanggal mulai sewa.";
-
-        } elseif ($tanggalKembali > $tanggalHariIni) {
-
-            $pesan = "Tanggal pengembalian tidak boleh melebihi tanggal hari ini.";
-
         } else {
 
-            // Hitung batas toleransi 2 hari
+            // ==========================================
+            // HITUNG BATAS TOLERANSI 2 HARI
+            // ==========================================
+
             $tanggalSelesai = new DateTime(
                 $dataSewa["tanggal_selesai"]
             );
@@ -125,7 +126,10 @@ if (
 
             $tanggalAktual = new DateTime($tanggalKembali);
 
-            // Hitung keterlambatan
+            // ==========================================
+            // HITUNG KETERLAMBATAN
+            // ==========================================
+
             $hariTerlambat = 0;
 
             if ($tanggalAktual > $batasToleransi) {
@@ -137,45 +141,111 @@ if (
                 $hariTerlambat = (int) $selisih->days;
             }
 
-            // Hitung denda
+            // ==========================================
+            // HITUNG DENDA
+            // ==========================================
+
             $denda = $hariTerlambat * $dendaPerHari;
 
-            // Simpan pengembalian
-            $stmtUpdate = mysqli_prepare(
-                $conn,
-                "UPDATE sewa
-                 SET tanggal_pengembalian = ?,
-                     kondisi_pengembalian = ?,
-                     denda = ?,
-                     status = 'Dikembalikan'
-                 WHERE id_sewa = ?
-                 AND status = 'Diambil'"
-            );
+            // ==========================================
+            // SIMPAN PENGEMBALIAN DAN NOTIFIKASI
+            // ==========================================
 
-            mysqli_stmt_bind_param(
-                $stmtUpdate,
-                "ssdi",
-                $tanggalKembali,
-                $kondisi,
-                $denda,
-                $idSewa
-            );
+            mysqli_begin_transaction($conn);
 
-            if (
-                mysqli_stmt_execute($stmtUpdate) &&
-                mysqli_stmt_affected_rows($stmtUpdate) > 0
-            ) {
+            $stmtUpdate = null;
+            $stmtNotif = null;
+
+            try {
+
+                // Update data penyewaan
+                $stmtUpdate = mysqli_prepare(
+                    $conn,
+                    "UPDATE sewa
+                     SET tanggal_pengembalian = ?,
+                         kondisi_pengembalian = ?,
+                         denda = ?,
+                         status = 'Dikembalikan'
+                     WHERE id_sewa = ?
+                     AND status = 'Diambil'"
+                );
+
+                mysqli_stmt_bind_param(
+                    $stmtUpdate,
+                    "ssdi",
+                    $tanggalKembali,
+                    $kondisi,
+                    $denda,
+                    $idSewa
+                );
+
+                if (
+                    !mysqli_stmt_execute($stmtUpdate) ||
+                    mysqli_stmt_affected_rows($stmtUpdate) <= 0
+                ) {
+                    throw new Exception(
+                        "Gagal menyimpan pengembalian. Silakan periksa kembali data booking."
+                    );
+                }
 
                 mysqli_stmt_close($stmtUpdate);
+                $stmtUpdate = null;
+
+                // ==========================================
+                // BUAT NOTIFIKASI UNTUK PELANGGAN
+                // ==========================================
+
+                $pesanPelanggan =
+                    "Pengembalian booking " .
+                    $dataSewa["kode_sewa"] .
+                    " berhasil diproses. Barang telah diterima admin. Terima kasih sudah menyewa di Kelana!";
+
+                $stmtNotif = mysqli_prepare(
+                    $conn,
+                    "INSERT INTO notifikasi_pelanggan
+                     (id_user, id_sewa, pesan)
+                     VALUES (?, ?, ?)"
+                );
+
+                mysqli_stmt_bind_param(
+                    $stmtNotif,
+                    "iis",
+                    $dataSewa["id_user"],
+                    $idSewa,
+                    $pesanPelanggan
+                );
+
+                if (!mysqli_stmt_execute($stmtNotif)) {
+                    throw new Exception(
+                        "Gagal membuat notifikasi pelanggan."
+                    );
+                }
+
+                mysqli_stmt_close($stmtNotif);
+                $stmtNotif = null;
+
+                // ==========================================
+                // SIMPAN SEMUA PERUBAHAN
+                // ==========================================
+
+                mysqli_commit($conn);
 
                 header("Location: pengembalian.php?pesan=berhasil");
                 exit;
 
-            } else {
+            } catch (Exception $e) {
 
-                $pesan = "Gagal menyimpan pengembalian. Silakan periksa kembali data booking.";
+                mysqli_rollback($conn);
 
-                mysqli_stmt_close($stmtUpdate);
+                if ($stmtUpdate !== null) {
+                    mysqli_stmt_close($stmtUpdate);
+                }
+
+                if ($stmtNotif !== null) {
+                    mysqli_stmt_close($stmtNotif);
+                }
+
+                $pesan = $e->getMessage();
             }
         }
     }
@@ -222,6 +292,8 @@ $pesanUrl = $_GET["pesan"] ?? "";
 
     <title>Pengembalian - Kelana</title>
 
+    <link rel="stylesheet" href="../assets/css/style.css">
+
     <style>
 
         * {
@@ -232,29 +304,61 @@ $pesanUrl = $_GET["pesan"] ?? "";
         }
 
         body {
-            background: #f4f6f3;
+            background: transparent;
             color: #26352d;
         }
 
-        .sidebar {
-            width: 240px;
-            height: 100vh;
-            background: #203c30;
-            color: white;
-            position: fixed;
-            padding: 30px 20px;
+        /* ==========================================
+           LAYOUT ADMIN
+        ========================================== */
+
+        .admin-layout {
+            display: flex;
+            min-height: 100vh;
         }
 
-        .logo {
-            font-size: 25px;
-            font-weight: bold;
+        /* ==========================================
+           SIDEBAR - MENGIKUTI DASHBOARD
+        ========================================== */
+
+        .sidebar {
+            width: 245px;
+            min-height: 100vh;
+            background: #31583c;
+            color: white;
+            padding: 28px 18px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-logo {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 8px;
+        }
+
+        .sidebar-logo a {
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        .sidebar-logo img {
+            display: block;
+            width: 190px;
+            height: 90px;
+            object-fit: contain;
+        }
+
+        .sidebar .subtitle {
+            text-align: center;
+            font-size: 12px;
+            color: #d9e5d8;
             margin-bottom: 35px;
-            letter-spacing: 2px;
         }
 
         .sidebar a {
             display: block;
-            color: #e5eee8;
+            color: #e8efe7;
             text-decoration: none;
             padding: 13px 15px;
             border-radius: 7px;
@@ -264,12 +368,22 @@ $pesanUrl = $_GET["pesan"] ?? "";
 
         .sidebar a:hover,
         .sidebar a.aktif {
-            background: #42634f;
+            background: #456e4f;
             color: white;
         }
 
+        .sidebar .logout {
+            margin-top: 35px;
+            color: #ffd6d6;
+        }
+
+        /* ==========================================
+           KONTEN UTAMA
+        ========================================== */
+
         .main {
-            margin-left: 240px;
+            flex: 1;
+            min-width: 0;
             padding: 35px;
         }
 
@@ -278,6 +392,7 @@ $pesanUrl = $_GET["pesan"] ?? "";
         }
 
         .header h1 {
+            color: #26352d;
             font-size: 27px;
             margin-bottom: 8px;
         }
@@ -287,19 +402,28 @@ $pesanUrl = $_GET["pesan"] ?? "";
             font-size: 14px;
         }
 
+        /* ==========================================
+           CARD
+        ========================================== */
+
         .card {
             background: white;
             padding: 25px;
             border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.04);
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
             margin-bottom: 25px;
             overflow-x: auto;
         }
 
         .card h2 {
+            color: #26352d;
             font-size: 19px;
             margin-bottom: 20px;
         }
+
+        /* ==========================================
+           TABEL
+        ========================================== */
 
         table {
             width: 100%;
@@ -307,7 +431,8 @@ $pesanUrl = $_GET["pesan"] ?? "";
             min-width: 850px;
         }
 
-        th, td {
+        th,
+        td {
             padding: 14px 12px;
             text-align: left;
             border-bottom: 1px solid #edf0ed;
@@ -316,8 +441,16 @@ $pesanUrl = $_GET["pesan"] ?? "";
         }
 
         th {
-            background: #f4f7f4;
-            color: #526357;
+            background: #f1f5ef;
+            color: #31583c;
+        }
+
+        td {
+            color: #444;
+        }
+
+        tbody tr:hover {
+            background: #f8fbf7;
         }
 
         .kode {
@@ -325,19 +458,31 @@ $pesanUrl = $_GET["pesan"] ?? "";
             color: #294b39;
         }
 
+        /* ==========================================
+           FORM PENGEMBALIAN
+        ========================================== */
+
         label {
             display: block;
             font-weight: bold;
             font-size: 13px;
             margin: 12px 0 7px;
+            color: #385640;
         }
 
-        input, textarea {
+        input,
+        textarea {
             width: 100%;
             padding: 10px;
             border: 1px solid #d9e0da;
             border-radius: 6px;
             font-size: 13px;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #31583c;
         }
 
         input[type="date"] {
@@ -348,18 +493,17 @@ $pesanUrl = $_GET["pesan"] ?? "";
             color-scheme: light;
         }
 
-        input[type="date"]:disabled {
-            opacity: 1;
-            background: #ffffff;
-        }
-
         textarea {
             min-height: 65px;
             resize: vertical;
         }
 
+        .form-kembali {
+            min-width: 190px;
+        }
+
         button {
-            background: #294b39;
+            background: #31583c;
             color: white;
             border: none;
             padding: 10px 13px;
@@ -370,12 +514,12 @@ $pesanUrl = $_GET["pesan"] ?? "";
         }
 
         button:hover {
-            background: #42634f;
+            background: #456e4f;
         }
 
-        .form-kembali {
-            min-width: 190px;
-        }
+        /* ==========================================
+           PESAN DAN INFORMASI
+        ========================================== */
 
         .pesan {
             padding: 13px;
@@ -384,6 +528,11 @@ $pesanUrl = $_GET["pesan"] ?? "";
             color: #285c38;
             margin-bottom: 20px;
             font-size: 14px;
+        }
+
+        .pesan-error {
+            background: #fce8e8;
+            color: #9b2929;
         }
 
         .kosong {
@@ -400,17 +549,42 @@ $pesanUrl = $_GET["pesan"] ?? "";
             line-height: 1.6;
         }
 
+        /* ==========================================
+           RESPONSIVE
+        ========================================== */
+
         @media(max-width: 800px) {
+
+            .admin-layout {
+                display: block;
+            }
 
             .sidebar {
                 width: 100%;
-                height: auto;
-                position: relative;
+                min-height: auto;
+            }
+
+            .sidebar-logo img {
+                width: 150px;
+                height: 75px;
+            }
+
+            .sidebar a {
+                display: inline-block;
+                margin: 3px;
             }
 
             .main {
                 margin-left: 0;
-                padding: 20px;
+                padding: 22px 15px;
+            }
+
+        }
+
+        @media(max-width: 480px) {
+
+            .card {
+                padding: 18px;
             }
 
         }
@@ -421,23 +595,54 @@ $pesanUrl = $_GET["pesan"] ?? "";
 
 <body>
 
-    <div class="sidebar">
+<div class="admin-layout">
 
-        <div class="logo">KELANA.</div>
+    <!-- SIDEBAR -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-logo">
+            <a href="../index.php">
+                <img
+                    src="../assets/images/logo-kelana.png"
+                    alt="Logo KELANA"
+                >
+            </a>
+        </div>
+
+        <div class="subtitle">PANEL ADMIN</div>
 
         <a href="dashboard.php">Dashboard</a>
+
         <a href="barang.php">Data Barang</a>
+
         <a href="kategori.php">Kategori</a>
+
+        <a href="member.php">Manajemen Member</a>
+
         <a href="booking.php">Data Booking</a>
+
         <a href="pengembalian.php" class="aktif">Pengembalian</a>
-        <a href="faq.php">FAQ</a>
+
+        <a href="faq.php">Kelola FAQ</a>
+
         <a href="laporan.php">Laporan</a>
+
         <a href="../index.php">Lihat Website</a>
-        <a href="../auth/logout.php">Keluar</a>
 
-    </div>
+        <a
+            href="../auth/logout.php"
+            class="logout"
+            onclick="return confirm('Yakin ingin keluar dari akun?')"
+        >
+            Keluar
+        </a>
 
-    <div class="main">
+    </aside>
+
+    <!-- KONTEN UTAMA -->
+
+    <main class="main">
 
         <div class="header">
 
@@ -451,7 +656,7 @@ $pesanUrl = $_GET["pesan"] ?? "";
 
         <?php if ($pesan !== "") { ?>
 
-            <div class="pesan">
+            <div class="pesan pesan-error">
                 <?= htmlspecialchars($pesan) ?>
             </div>
 
@@ -460,10 +665,12 @@ $pesanUrl = $_GET["pesan"] ?? "";
         <?php if ($pesanUrl === "berhasil") { ?>
 
             <div class="pesan">
-                Pengembalian berhasil dicatat dan denda telah dihitung.
+                Pengembalian berhasil dicatat, denda telah dihitung, dan notifikasi pelanggan telah dibuat.
             </div>
 
         <?php } ?>
+
+        <!-- DAFTAR PENYEWAAN AKTIF -->
 
         <div class="card">
 
@@ -512,15 +719,6 @@ $pesanUrl = $_GET["pesan"] ?? "";
                             $batas->modify(
                                 "+" . $toleransiHari . " days"
                             );
-
-                            $tanggalMulai = $booking["tanggal_mulai"];
-
-                            // Pastikan batas kalender tidak saling bertabrakan
-                            $tanggalMaksimal = $tanggalHariIni;
-
-                            if ($tanggalMaksimal < $tanggalMulai) {
-                                $tanggalMaksimal = $tanggalMulai;
-                            }
 
                     ?>
 
@@ -585,9 +783,7 @@ $pesanUrl = $_GET["pesan"] ?? "";
                                     <input
                                         type="date"
                                         name="tanggal_pengembalian"
-                                        value="<?= htmlspecialchars($tanggalMaksimal) ?>"
-                                        min="<?= htmlspecialchars($tanggalMulai) ?>"
-                                        max="<?= htmlspecialchars($tanggalMaksimal) ?>"
+                                        value="<?= htmlspecialchars($tanggalHariIni) ?>"
                                         required
                                     >
 
@@ -599,7 +795,10 @@ $pesanUrl = $_GET["pesan"] ?? "";
                                         required
                                     ></textarea>
 
-                                    <button type="submit">
+                                    <button
+                                        type="submit"
+                                        onclick="return confirm('Proses pengembalian barang ini?')"
+                                    >
                                         Proses Pengembalian
                                     </button>
 
@@ -632,6 +831,8 @@ $pesanUrl = $_GET["pesan"] ?? "";
             </table>
 
         </div>
+
+        <!-- RIWAYAT PENGEMBALIAN -->
 
         <div class="card">
 
@@ -759,8 +960,9 @@ $pesanUrl = $_GET["pesan"] ?? "";
 
         </div>
 
-    </div>
+    </main>
+
+</div>
 
 </body>
-
 </html>

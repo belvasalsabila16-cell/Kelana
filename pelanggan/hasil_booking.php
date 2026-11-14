@@ -3,13 +3,52 @@
 session_start();
 include "../config/database.php";
 
-// Pastikan pelanggan sudah login
+// ==========================================
+// 1. CEK LOGIN
+// ==========================================
+
 if (!isset($_SESSION["id_user"])) {
     header("Location: ../auth/login.php");
     exit;
 }
 
-// Ambil kode booking
+$idUser = (int) $_SESSION["id_user"];
+
+// ==========================================
+// 2. NAVBAR DAN JUMLAH KERANJANG
+// ==========================================
+
+$halamanAktif = basename($_SERVER["PHP_SELF"]);
+
+$jumlahKeranjang = isset($_SESSION["keranjang"])
+    ? array_sum($_SESSION["keranjang"])
+    : 0;
+
+// ==========================================
+// 3. JUMLAH NOTIFIKASI BELUM DIBACA
+// ==========================================
+
+$stmtNotif = mysqli_prepare($conn, "
+    SELECT COUNT(*) AS jumlah
+    FROM notifikasi_pelanggan
+    WHERE id_user = ?
+    AND dibaca = 0
+");
+
+mysqli_stmt_bind_param($stmtNotif, "i", $idUser);
+mysqli_stmt_execute($stmtNotif);
+
+$hasilNotif = mysqli_stmt_get_result($stmtNotif);
+$dataNotif = mysqli_fetch_assoc($hasilNotif);
+
+$jumlahNotifikasi = (int) $dataNotif["jumlah"];
+
+mysqli_stmt_close($stmtNotif);
+
+// ==========================================
+// 4. AMBIL KODE BOOKING
+// ==========================================
+
 $kodeBooking = $_GET["kode"] ?? ($_SESSION["booking_terakhir"] ?? "");
 
 if (empty($kodeBooking)) {
@@ -17,7 +56,10 @@ if (empty($kodeBooking)) {
     exit;
 }
 
-// Ambil data booking milik pelanggan yang sedang login
+// ==========================================
+// 5. AMBIL DATA BOOKING PELANGGAN
+// ==========================================
+
 $stmt = mysqli_prepare($conn, "
     SELECT s.*, u.nama, u.email, u.no_hp
     FROM sewa s
@@ -25,20 +67,20 @@ $stmt = mysqli_prepare($conn, "
     WHERE s.kode_sewa = ? AND s.id_user = ?
 ");
 
-$idUser = (int) $_SESSION["id_user"];
-
 mysqli_stmt_bind_param($stmt, "si", $kodeBooking, $idUser);
 mysqli_stmt_execute($stmt);
 
 $hasil = mysqli_stmt_get_result($stmt);
 $booking = mysqli_fetch_assoc($hasil);
 
-// Pastikan booking ditemukan
 if (!$booking) {
     die("Data booking tidak ditemukan.");
 }
 
-// Ambil detail barang yang dipesan
+// ==========================================
+// 6. AMBIL DETAIL BARANG
+// ==========================================
+
 $stmtDetail = mysqli_prepare($conn, "
     SELECT ds.*, b.nama_barang
     FROM detail_sewa ds
@@ -59,7 +101,10 @@ while ($barang = mysqli_fetch_assoc($hasilDetail)) {
     $daftarBarang[] = $barang;
 }
 
-// Ambil nomor WhatsApp admin dari tabel pengaturan
+// ==========================================
+// 7. AMBIL NOMOR WHATSAPP ADMIN
+// ==========================================
+
 $queryPengaturan = mysqli_query($conn, "
     SELECT no_wa_admin FROM pengaturan LIMIT 1
 ");
@@ -70,15 +115,16 @@ $dataPengaturan = $queryPengaturan
 
 $nomorAdmin = $dataPengaturan["no_wa_admin"] ?? "";
 
-// Bersihkan nomor dari karakter selain angka
 $nomorAdmin = preg_replace('/\D+/', '', (string) $nomorAdmin);
 
-// Ubah format nomor Indonesia menjadi internasional
 if (substr($nomorAdmin, 0, 1) === "0") {
     $nomorAdmin = "62" . substr($nomorAdmin, 1);
 }
 
-// Siapkan pesan WhatsApp
+// ==========================================
+// 8. SIAPKAN PESAN WHATSAPP
+// ==========================================
+
 $pesanWA = "Halo Admin Kelana, saya ingin mengonfirmasi booking.\n\n";
 
 $pesanWA .= "Kode Booking: " . $booking["kode_sewa"] . "\n";
@@ -103,7 +149,6 @@ $pesanWA .= "\nTotal Pembayaran: Rp" .
 $pesanWA .= "\nStatus Pembayaran: " .
     $booking["status_pembayaran"];
 
-// Buat tautan WhatsApp
 $linkWA = "";
 
 if (!empty($nomorAdmin)) {
@@ -116,6 +161,7 @@ if (!empty($nomorAdmin)) {
 <html lang="id">
 
 <head>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -124,6 +170,157 @@ if (!empty($nomorAdmin)) {
     <link rel="stylesheet" href="../assets/css/style.css">
 
     <style>
+
+        /* LATAR HALAMAN */
+
+        body {
+            background-color: transparent;
+        }
+
+        /* LOGO NAVBAR */
+
+        .navbar .logo-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            flex-shrink: 0;
+        }
+
+        .navbar .logo-link img {
+            width: 220px;
+            height: 100px;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* NAVBAR */
+
+        .navbar {
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .menu {
+            flex-wrap: wrap;
+        }
+
+        .navbar .menu a.active {
+            color: #31583c;
+            font-weight: 700;
+            position: relative;
+        }
+
+        .navbar .menu a.active::after {
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #31583c;
+        }
+
+        /* KELOMPOK NOTIFIKASI DAN AKUN */
+
+        .navbar-account-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        /* LONCENG NOTIFIKASI */
+
+        .notification-link {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            color: #31583c;
+            text-decoration: none;
+            border-radius: 50%;
+            transition: .2s;
+        }
+
+        .notification-link:hover {
+            background: #f0f5f0;
+        }
+
+        .notification-link svg {
+            width: 23px;
+            height: 23px;
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #dc3545;
+            color: white;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: bold;
+            border: 2px solid white;
+        }
+
+        /* DROPDOWN AKUN */
+
+        .account-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .account-trigger {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #31583c;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .account-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            min-width: 190px;
+            background: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,.12);
+            border-radius: 8px;
+            padding: 8px 0;
+            z-index: 1000;
+        }
+
+        .account-dropdown:hover .account-menu {
+            display: block;
+        }
+
+        .account-menu a {
+            display: block;
+            padding: 11px 16px;
+            color: #31583c;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .account-menu a:hover,
+        .account-menu a.active {
+            background: #f0f5f0;
+            font-weight: 700;
+        }
+
+        /* HASIL BOOKING */
+
         .result-container {
             max-width: 850px;
             margin: 50px auto;
@@ -229,7 +426,26 @@ if (!empty($nomorAdmin)) {
             margin-top: 20px;
         }
 
+        @media (max-width: 700px) {
+
+            .navbar {
+                flex-wrap: wrap;
+                gap: 15px;
+            }
+
+            .navbar .logo-link img {
+                width: 120px;
+                height: 55px;
+            }
+
+            .menu {
+                flex-wrap: wrap;
+            }
+
+        }
+
         @media (max-width: 600px) {
+
             .result-info {
                 grid-template-columns: 1fr;
             }
@@ -246,31 +462,116 @@ if (!empty($nomorAdmin)) {
                 width: 100%;
                 box-sizing: border-box;
             }
+
         }
+
     </style>
+
 </head>
 
 <body>
 
+<!-- NAVBAR -->
+
 <nav class="navbar">
 
-    <h2>KELANA.</h2>
+    <a href="../index.php" class="logo-link">
+        <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+    </a>
 
     <div class="menu">
-        <a href="../index.php">Beranda</a>
-        <a href="katalog.php">Katalog</a>
-        <a href="keranjang.php">Keranjang</a>
-        <a href="tentang.php">Tentang Kami</a>
-        <a href="faq.php">FAQ</a>
+
+        <a href="../index.php"
+           class="<?php echo $halamanAktif === 'index.php' ? 'active' : ''; ?>">
+            Beranda
+        </a>
+
+        <a href="katalog.php"
+           class="<?php echo $halamanAktif === 'katalog.php' ? 'active' : ''; ?>">
+            Katalog
+        </a>
+
+        <a href="keranjang.php"
+           class="<?php echo $halamanAktif === 'keranjang.php' ? 'active' : ''; ?>">
+            Keranjang (<?php echo $jumlahKeranjang; ?>)
+        </a>
+
+        <a href="tentang.php"
+           class="<?php echo $halamanAktif === 'tentang.php' ? 'active' : ''; ?>">
+            Tentang Kami
+        </a>
+
+        <a href="faq.php"
+           class="<?php echo $halamanAktif === 'faq.php' ? 'active' : ''; ?>">
+            FAQ
+        </a>
+
     </div>
 
-    <a href="profil.php" class="login">Profil Saya</a>
+    <div class="navbar-account-group">
+
+        <a href="notifikasi.php"
+           class="notification-link"
+           title="Notifikasi">
+
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+                <path d="M10 21h4"></path>
+            </svg>
+
+            <?php if ($jumlahNotifikasi > 0) { ?>
+
+                <span class="notification-badge">
+                    <?php echo $jumlahNotifikasi > 99 ? '99+' : $jumlahNotifikasi; ?>
+                </span>
+
+            <?php } ?>
+
+        </a>
+
+        <div class="account-dropdown">
+
+            <a href="profil.php" class="account-trigger">
+                <span>Akun</span>
+                <span>⌄</span>
+            </a>
+
+            <div class="account-menu">
+
+                <a href="profil.php"
+                   class="<?php echo $halamanAktif === 'profil.php' ? 'active' : ''; ?>">
+                    Profil Saya
+                </a>
+
+                <a href="riwayat.php"
+                   class="<?php echo $halamanAktif === 'riwayat.php' ? 'active' : ''; ?>">
+                    Riwayat Penyewaan
+                </a>
+
+                <a href="../auth/logout.php">
+                    Keluar
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
 
 </nav>
 
+<!-- HASIL BOOKING -->
+
 <section class="result-container">
 
-    <!-- Informasi booking berhasil -->
     <div class="result-success">
 
         <h1>Booking Berhasil!</h1>
@@ -290,7 +591,8 @@ if (!empty($nomorAdmin)) {
 
     </div>
 
-    <!-- Informasi pelanggan -->
+    <!-- INFORMASI PELANGGAN -->
+
     <div class="result-card">
 
         <h2>Informasi Pelanggan</h2>
@@ -332,7 +634,8 @@ if (!empty($nomorAdmin)) {
 
     </div>
 
-    <!-- Informasi penyewaan -->
+    <!-- INFORMASI PENYEWAAN -->
+
     <div class="result-card">
 
         <h2>Informasi Penyewaan</h2>
@@ -372,7 +675,8 @@ if (!empty($nomorAdmin)) {
 
     </div>
 
-    <!-- Rincian barang -->
+    <!-- RINCIAN BARANG -->
+
     <div class="result-card">
 
         <h2>Rincian Barang</h2>
@@ -430,7 +734,8 @@ if (!empty($nomorAdmin)) {
 
     </div>
 
-    <!-- Langkah selanjutnya -->
+    <!-- LANGKAH SELANJUTNYA -->
+
     <div class="result-card">
 
         <h2>Langkah Selanjutnya</h2>
@@ -471,6 +776,11 @@ if (!empty($nomorAdmin)) {
     </div>
 
 </section>
+
+<?php
+// POPUP NOTIFIKASI PELANGGAN
+include "notifikasi_popup.php";
+?>
 
 </body>
 </html>

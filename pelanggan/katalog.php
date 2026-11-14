@@ -1,62 +1,126 @@
-
 <?php
 session_start();
-include "../config/database.php";
 
-// Inisialisasi keranjang jika belum ada
-if (!isset($_SESSION['keranjang'])) {
-    $_SESSION['keranjang'] = [];
+include_once "../config/database.php";
+
+// ==========================================
+// FUNGSI BANTU
+// ==========================================
+
+function e($nilai) {
+    return htmlspecialchars((string) $nilai, ENT_QUOTES, "UTF-8");
 }
 
-// Proses tambah barang ke keranjang
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["tambah_keranjang"])) {
+function formatKategori($nama) {
+    return strtolower(trim((string) $nama));
+}
 
-    $id_barang = (int) $_POST["id_barang"];
-    $jumlah = (int) $_POST["jumlah"];
+// ==========================================
+// 1. CEK ROLE PENGGUNA DAN NOTIFIKASI
+// ==========================================
 
-    $cekBarang = mysqli_query($conn, "
-        SELECT * FROM barang WHERE id_barang = $id_barang
-    ");
+$isAdmin = false;
+$isPelanggan = false;
+$jumlahNotifikasi = 0;
 
-    $barang = mysqli_fetch_assoc($cekBarang);
+if (isset($_SESSION["id_user"])) {
+    $idUser = (int) $_SESSION["id_user"];
 
-    if ($barang && $jumlah > 0 && $jumlah <= $barang["stok"]) {
-        $_SESSION["keranjang"][$id_barang] = $jumlah;
+    $cekRole = mysqli_query(
+        $conn,
+        "SELECT role FROM user WHERE id_user = $idUser"
+    );
+
+    $dataRole = mysqli_fetch_assoc($cekRole);
+
+    if ($dataRole) {
+        if ($dataRole["role"] === "admin") {
+            $isAdmin = true;
+        }
+
+        if ($dataRole["role"] === "pelanggan") {
+            $isPelanggan = true;
+
+            $queryNotifikasi = mysqli_query($conn, "
+                SELECT COUNT(*) AS jumlah
+                FROM notifikasi_pelanggan
+                WHERE id_user = $idUser
+                AND dibaca = 0
+            ");
+
+            if ($queryNotifikasi) {
+                $dataNotifikasi = mysqli_fetch_assoc($queryNotifikasi);
+                $jumlahNotifikasi = (int) $dataNotifikasi["jumlah"];
+            }
+        }
     }
-
-    header("Location: katalog.php");
-    exit;
 }
 
-// Pastikan tanggal penyewaan sudah dipilih
-if (empty($_SESSION['tanggal_mulai']) || empty($_SESSION['tanggal_selesai'])) {
+$halamanAktif = basename($_SERVER["PHP_SELF"]);
+
+// ==========================================
+// 2. INISIALISASI KERANJANG
+// ==========================================
+
+if (!isset($_SESSION["keranjang"])) {
+    $_SESSION["keranjang"] = [];
+}
+
+// ==========================================
+// 3. CEK TANGGAL PENYEWAAN
+// ==========================================
+
+if (
+    empty($_SESSION["tanggal_mulai"]) ||
+    empty($_SESSION["tanggal_selesai"])
+) {
     header("Location: pilih_tanggal.php");
     exit;
 }
 
-// Ambil data barang
+// ==========================================
+// 4. AMBIL DATA KATEGORI BARANG AKTIF
+// ==========================================
+
+$queryKategori = mysqli_query($conn, "
+    SELECT MIN(k.id_kategori) AS id_kategori, k.nama_kategori
+    FROM kategori k
+    INNER JOIN barang b
+        ON k.id_kategori = b.id_kategori
+        AND b.status_barang = 'aktif'
+    GROUP BY k.nama_kategori
+    ORDER BY k.nama_kategori ASC
+");
+
+// ==========================================
+// 5. AMBIL DATA BARANG AKTIF
+// ==========================================
+
 $query = mysqli_query($conn, "
     SELECT barang.*, kategori.nama_kategori
     FROM barang
-    JOIN kategori
-    ON barang.id_kategori = kategori.id_kategori
+    INNER JOIN kategori
+        ON barang.id_kategori = kategori.id_kategori
+    WHERE barang.status_barang = 'aktif'
     ORDER BY barang.id_barang ASC
 ");
 
-// Menghitung informasi penyewaan
-$tanggalMulai = new DateTime($_SESSION['tanggal_mulai']);
-$tanggalSelesai = new DateTime($_SESSION['tanggal_selesai']);
+// ==========================================
+// 6. HITUNG INFORMASI PENYEWAAN
+// ==========================================
 
-// Durasi dihitung termasuk tanggal mulai dan selesai
+$tanggalMulai = new DateTime($_SESSION["tanggal_mulai"]);
+$tanggalSelesai = new DateTime($_SESSION["tanggal_selesai"]);
+
 $durasiSewa = $tanggalMulai->diff($tanggalSelesai)->days + 1;
 
-// Mengambil batas pengembalian dari session
-if (!empty($_SESSION['batas_pengembalian'])) {
-    $batasPengembalian = new DateTime($_SESSION['batas_pengembalian']);
+if (!empty($_SESSION["batas_pengembalian"])) {
+    $batasPengembalian = new DateTime($_SESSION["batas_pengembalian"]);
 } else {
     $batasPengembalian = clone $tanggalSelesai;
-    $batasPengembalian->modify('+2 days');
+    $batasPengembalian->modify("+2 days");
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -71,78 +135,120 @@ if (!empty($_SESSION['batas_pengembalian'])) {
     <link rel="stylesheet" href="../assets/css/style.css">
 
     <style>
-        .catalog {
-            padding: 50px 7%;
+        * {
+            box-sizing: border-box;
         }
 
-        .product-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 25px;
-            margin-top: 30px;
+        body {
+            background-color: transparent;
+            color: #293b30;
         }
 
-        .product-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.08);
-        }
+        /* ======================================
+           LOGO NAVBAR
+        ====================================== */
 
-        .product-card h3 {
-            margin: 12px 0;
-            color: #31583c;
-        }
-
-        .category {
-            color: #777;
-            font-size: 14px;
-        }
-
-        .price {
-            font-weight: bold;
-            margin: 12px 0;
-        }
-
-        .stock {
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-
-        .detail-btn {
-            display: inline-block;
-            background: #31583c;
-            color: white;
-            padding: 10px 15px;
-            text-decoration: none;
-            border-radius: 6px;
-        }
-
-        .rental-period {
+        .navbar .logo-link {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            gap: 20px;
-            flex-wrap: wrap;
-            background: #f0f5ef;
-            padding: 20px 7%;
-            margin-top: 20px;
+            text-decoration: none;
+            flex-shrink: 0;
         }
 
-        .rental-info {
+        .navbar .logo-link img {
+            width: 220px;
+            height: 100px;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* ======================================
+           PENANDA HALAMAN AKTIF
+        ====================================== */
+
+        .navbar .menu a.active,
+        .navbar .menu a.active:visited {
+            color: #31583c !important;
+            font-weight: 700 !important;
+            position: relative;
+        }
+
+        .navbar .menu a.active::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: -7px;
+            width: 100% !important;
+            height: 2px;
+            background: #31583c;
+        }
+
+        /* ======================================
+           KELOMPOK LONCENG DAN AKUN
+        ====================================== */
+
+        .navbar-account-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        /* ======================================
+           IKON NOTIFIKASI
+        ====================================== */
+
+        .notification-link {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            margin: 0;
             color: #31583c;
-            margin-top: 10px;
-            line-height: 1.8;
+            text-decoration: none;
+            border-radius: 50%;
+            transition: background 0.2s;
+            flex-shrink: 0;
         }
 
-        .rental-info p {
-            margin: 3px 0;
+        .notification-link:hover {
+            background: #f0f5ef;
         }
 
-        /* Menu Akun */
+        .notification-link svg {
+            width: 23px;
+            height: 23px;
+            stroke: currentColor;
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -2px;
+            right: -3px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            background: #d93025;
+            color: white;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #f7f8f5;
+        }
+
+        /* ======================================
+           MENU AKUN
+        ====================================== */
+
         .account-dropdown {
             position: relative;
-            margin-left: 10px;
+            margin: 0;
         }
 
         .account-dropdown summary {
@@ -218,14 +324,330 @@ if (!empty($_SESSION['batas_pengembalian'])) {
             color: #a33;
         }
 
+        /* ======================================
+           TOMBOL KEMBALI KE PANEL ADMIN
+        ====================================== */
+
+        .admin-back-link {
+            display: inline-block;
+            background: #31583c;
+            color: white !important;
+            padding: 9px 14px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .admin-back-link:hover {
+            background: #24442d;
+        }
+
+        /* ======================================
+           INFORMASI PERIODE PENYEWAAN
+        ====================================== */
+
+        .rental-period {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            background: #f0f5ef;
+            padding: 20px 7%;
+            margin-top: 20px;
+        }
+
+        .rental-info {
+            color: #31583c;
+            margin-top: 10px;
+            line-height: 1.8;
+        }
+
+        .rental-info p {
+            margin: 3px 0;
+        }
+
+        .detail-btn {
+            display: inline-block;
+            background: #31583c;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .detail-btn:hover {
+            background: #24442d;
+        }
+
+        /* ======================================
+           AREA KATALOG
+        ====================================== */
+
+        .catalog {
+            padding: 45px 7%;
+        }
+
+        .catalog-heading {
+            margin-bottom: 30px;
+        }
+
+        .catalog-heading h1 {
+            color: #294a36;
+            margin-bottom: 10px;
+        }
+
+        .catalog-heading p {
+            color: #78847b;
+        }
+
+        .catalog-layout {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            gap: 30px;
+            align-items: start;
+        }
+
+        /* ======================================
+           FILTER KATEGORI
+        ====================================== */
+
+        .filter-box {
+            background: white;
+            border: 1px solid #e7ece7;
+            border-radius: 10px;
+            padding: 22px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.04);
+        }
+
+        .filter-box h3 {
+            color: #31583c;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .filter-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            color: #46564a;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .filter-option input {
+            width: 16px;
+            height: 16px;
+            accent-color: #31583c;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .filter-reset {
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px;
+            border: 1px solid #31583c;
+            border-radius: 6px;
+            background: white;
+            color: #31583c;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .filter-reset:hover {
+            background: #f0f5ef;
+        }
+
+        /* ======================================
+           PENCARIAN BARANG
+        ====================================== */
+
+        .catalog-search {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .catalog-search input {
+            width: 100%;
+            padding: 14px 18px 14px 45px;
+            border: 1px solid #dce4dc;
+            border-radius: 8px;
+            outline: none;
+            font-size: 14px;
+            background: white;
+        }
+
+        .catalog-search input:focus {
+            border-color: #31583c;
+            box-shadow: 0 0 0 3px rgba(49,88,60,0.08);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #78847b;
+            font-size: 18px;
+        }
+
+        /* ======================================
+           GRID PRODUK
+        ====================================== */
+
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 22px;
+        }
+
+        .product-card {
+            display: block;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #edf0eb;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .product-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 7px 18px rgba(0,0,0,0.10);
+        }
+
+        .product-image {
+            width: 100%;
+            height: 175px;
+            object-fit: cover;
+            display: block;
+            background: #edf2ec;
+        }
+
+        .image-placeholder {
+            width: 100%;
+            height: 175px;
+            background: #edf2ec;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #78847b;
+            font-size: 13px;
+        }
+
+        .product-info {
+            padding: 15px 12px 18px;
+            text-align: center;
+        }
+
+        .product-info h3 {
+            color: #31583c;
+            font-size: 15px;
+            font-weight: 600;
+            margin: 0 0 9px;
+        }
+
+        .product-info .price {
+            color: #293b30;
+            font-size: 14px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .empty-result {
+            display: none;
+            padding: 35px 20px;
+            text-align: center;
+            background: white;
+            border-radius: 10px;
+            color: #78847b;
+            border: 1px solid #edf0eb;
+        }
+
+        .empty-result h3 {
+            color: #31583c;
+            margin-bottom: 8px;
+        }
+
+        /* ======================================
+           RESPONSIVE
+        ====================================== */
+
+        @media (max-width: 1100px) {
+            .product-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 850px) {
+            .catalog-layout {
+                grid-template-columns: 190px minmax(0, 1fr);
+                gap: 20px;
+            }
+
+            .product-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
         @media (max-width: 700px) {
             .navbar {
                 flex-wrap: wrap;
                 gap: 15px;
             }
 
+            .navbar .logo-link img {
+                width: 120px;
+                height: 55px;
+            }
+
             .menu {
                 flex-wrap: wrap;
+            }
+
+            .navbar-account-group {
+                margin-left: 0;
+            }
+
+            .catalog-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .filter-box {
+                padding: 18px;
+            }
+
+            .rental-period {
+                padding: 20px 5%;
+            }
+
+            .catalog {
+                padding: 35px 5%;
+            }
+        }
+
+        @media (max-width: 450px) {
+            .product-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+            }
+
+            .product-image,
+            .image-placeholder {
+                height: 140px;
+            }
+
+            .product-info h3 {
+                font-size: 13px;
+            }
+
+            .product-info .price {
+                font-size: 12px;
             }
         }
     </style>
@@ -233,213 +655,410 @@ if (!empty($_SESSION['batas_pengembalian'])) {
 
 <body>
 
-<!-- Informasi Periode Penyewaan -->
-<div class="rental-period">
+<!-- ======================================
+     INFORMASI PERIODE PENYEWAAN
+====================================== -->
 
+<div class="rental-period">
     <div>
         <small>Periode Penyewaan</small>
 
         <h3>
-            <?php echo $tanggalMulai->format('d M Y'); ?>
+            <?= $tanggalMulai->format("d M Y"); ?>
             -
-            <?php echo $tanggalSelesai->format('d M Y'); ?>
+            <?= $tanggalSelesai->format("d M Y"); ?>
         </h3>
 
         <div class="rental-info">
-
             <p>
                 <strong>Durasi:</strong>
-                <?php echo $durasiSewa; ?> hari
+                <?= $durasiSewa; ?> hari
             </p>
 
             <p>
                 <strong>Batas Pengembalian:</strong>
-                <?php echo $batasPengembalian->format('d M Y'); ?>
+                <?= $batasPengembalian->format("d M Y"); ?>
             </p>
 
             <p>
                 Pengembalian sampai tanggal tersebut tidak dikenakan denda.
             </p>
-
         </div>
     </div>
 
     <a href="pilih_tanggal.php" class="detail-btn">
         ← Ubah Tanggal
     </a>
-
 </div>
 
-<!-- Navbar -->
+<!-- ======================================
+     NAVBAR KELANA
+====================================== -->
+
 <nav class="navbar">
 
-    <h2>KELANA.</h2>
+    <a href="../index.php" class="logo-link">
+        <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+    </a>
 
     <div class="menu">
 
-        <a href="../index.php">Beranda</a>
-
-        <a href="katalog.php">Katalog</a>
-
-        <a href="keranjang.php">
-            Keranjang (<?php echo count($_SESSION['keranjang'] ?? []); ?>)
+        <a href="../index.php"
+           class="<?php echo $halamanAktif === 'index.php' ? 'active' : ''; ?>">
+            Beranda
         </a>
 
-        <a href="tentang.php">Tentang Kami</a>
+        <a href="katalog.php"
+           class="<?php echo $halamanAktif === 'katalog.php' ? 'active' : ''; ?>">
+            Katalog
+        </a>
 
-        <a href="faq.php">FAQ</a>
+        <a href="keranjang.php"
+           class="<?php echo $halamanAktif === 'keranjang.php' ? 'active' : ''; ?>">
+            Keranjang (<?php echo count($_SESSION["keranjang"]); ?>)
+        </a>
+
+        <a href="tentang.php"
+           class="<?php echo $halamanAktif === 'tentang.php' ? 'active' : ''; ?>">
+            Tentang Kami
+        </a>
+
+        <a href="faq.php"
+           class="<?php echo $halamanAktif === 'faq.php' ? 'active' : ''; ?>">
+            FAQ
+        </a>
+
+        <?php if ($isAdmin) { ?>
+            <a href="../admin/dashboard.php" class="admin-back-link">
+                Kembali ke Panel Admin
+            </a>
+        <?php } ?>
 
     </div>
 
-    <?php if (isset($_SESSION["id_user"])) { ?>
+    <div class="navbar-account-group">
 
-        <details class="account-dropdown">
+        <?php if ($isPelanggan) { ?>
 
-            <summary>
+            <a href="notifikasi.php"
+               class="notification-link"
+               title="Notifikasi"
+               aria-label="Notifikasi">
 
-                <span class="profile-circle">
-                    <svg viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="1.7"
-                         stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="8" r="3.5"/>
-                        <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>
-                    </svg>
-                </span>
+                <svg viewBox="0 0 24 24"
+                     fill="none"
+                     stroke-width="1.8"
+                     stroke-linecap="round"
+                     stroke-linejoin="round">
 
-                <span class="account-label">Akun</span>
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+                    <path d="M10 21h4"/>
 
-                <span class="arrow">⌄</span>
+                </svg>
 
-            </summary>
+                <?php if ($jumlahNotifikasi > 0) { ?>
+                    <span class="notification-badge">
+                        <?= $jumlahNotifikasi > 99 ? "99+" : $jumlahNotifikasi; ?>
+                    </span>
+                <?php } ?>
 
-            <div class="dropdown-content">
+            </a>
 
-                <a href="profil.php">
-                    <span>Profil Saya</span>
-                    <span class="dropdown-arrow">›</span>
-                </a>
+        <?php } ?>
 
-                <div class="dropdown-divider"></div>
+        <?php if (isset($_SESSION["id_user"])) { ?>
 
-                <a href="riwayat.php">
-                    <span>Riwayat Penyewaan</span>
-                    <span class="dropdown-arrow">›</span>
-                </a>
+            <details class="account-dropdown">
 
-                <div class="dropdown-divider"></div>
+                <summary>
 
-                <a href="../auth/logout.php"
-                   class="logout-link"
-                   onclick="return confirm('Yakin ingin keluar dari akun?')">
-                    Keluar
-                </a>
+                    <span class="profile-circle">
+                        <svg viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.7"
+                             stroke-linecap="round" stroke-linejoin="round">
 
-            </div>
+                            <circle cx="12" cy="8" r="3.5"/>
+                            <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>
 
-        </details>
+                        </svg>
+                    </span>
 
-    <?php } else { ?>
+                    <span class="account-label">Akun</span>
+                    <span class="arrow">⌄</span>
 
-        <a href="../auth/login.php" class="login">Masuk</a>
+                </summary>
 
-    <?php } ?>
+                <div class="dropdown-content">
 
-</nav>
+                    <a href="profil.php">
+                        <span>Profil Saya</span>
+                        <span>›</span>
+                    </a>
 
-<!-- Katalog Barang -->
-<section class="catalog">
+                    <div class="dropdown-divider"></div>
 
-    <h1>Katalog Perlengkapan Camping</h1>
+                    <a href="riwayat.php">
+                        <span>Riwayat Penyewaan</span>
+                        <span>›</span>
+                    </a>
 
-    <p>Temukan perlengkapan terbaik untuk petualanganmu.</p>
+                    <div class="dropdown-divider"></div>
 
-    <div class="product-grid">
+                    <a href="../auth/logout.php"
+                       class="logout-link"
+                       onclick="return confirm('Yakin ingin keluar dari akun?')">
+                        Keluar
+                    </a>
 
-        <?php while ($barang = mysqli_fetch_assoc($query)) { ?>
+                </div>
 
-            <div class="product-card">
+            </details>
 
-                <p class="category">
-                    <?php echo htmlspecialchars($barang['nama_kategori']); ?>
-                </p>
+        <?php } else { ?>
 
-                <h3>
-                    <?php echo htmlspecialchars($barang['nama_barang']); ?>
-                </h3>
-
-                <p>
-                    <?php echo htmlspecialchars($barang['deskripsi']); ?>
-                </p>
-
-                <p class="price">
-                    Rp <?php echo number_format(
-                        $barang['harga_sewa'], 0, ',', '.'
-                    ); ?> / hari
-                </p>
-
-                <p class="stock">
-                    Stok tersedia: <?php echo $barang['stok']; ?>
-                </p>
-
-                <a href="detail.php?id=<?php echo $barang['id_barang']; ?>"
-                   class="detail-btn">
-                    Lihat Detail
-                </a>
-
-                <form method="POST" style="margin-top: 15px;">
-
-                    <input type="hidden"
-                           name="id_barang"
-                           value="<?php echo $barang['id_barang']; ?>">
-
-                    <label>Jumlah:</label>
-
-                    <input type="number"
-                           name="jumlah"
-                           value="<?php echo $_SESSION['keranjang'][$barang['id_barang']] ?? 1; ?>"
-                           min="1"
-                           max="<?php echo $barang['stok']; ?>"
-                           required
-                           style="width: 60px; padding: 8px;">
-
-                    <button type="submit"
-                            name="tambah_keranjang"
-                            class="detail-btn"
-                            style="border: none; cursor: pointer; margin-top: 10px;">
-                        + Tambah ke Keranjang
-                    </button>
-
-                </form>
-
-            </div>
+            <a href="../auth/login.php" class="login">Masuk</a>
 
         <?php } ?>
 
     </div>
 
+</nav>
+
+<!-- ======================================
+     KONTEN KATALOG
+====================================== -->
+
+<section class="catalog">
+
+    <div class="catalog-heading">
+        <h1>Katalog Perlengkapan Camping</h1>
+        <p>Temukan perlengkapan terbaik untuk petualanganmu.</p>
+    </div>
+
+    <div class="catalog-layout">
+
+        <!-- FILTER KATEGORI -->
+
+        <aside class="filter-box">
+
+            <h3>Kategori Barang</h3>
+
+            <div id="categoryFilters">
+
+                <?php if ($queryKategori && mysqli_num_rows($queryKategori) > 0): ?>
+
+                    <?php while ($kategori = mysqli_fetch_assoc($queryKategori)): ?>
+
+                        <label class="filter-option">
+
+                            <input
+                                type="checkbox"
+                                class="category-checkbox"
+                                value="<?= e(formatKategori($kategori["nama_kategori"])); ?>"
+                            >
+
+                            <span>
+                                <?= e($kategori["nama_kategori"]); ?>
+                            </span>
+
+                        </label>
+
+                    <?php endwhile; ?>
+
+                <?php else: ?>
+
+                    <p style="font-size: 13px; color: #78847b;">
+                        Belum ada kategori barang.
+                    </p>
+
+                <?php endif; ?>
+
+            </div>
+
+            <button type="button" class="filter-reset" id="resetFilter">
+                Tampilkan Semua
+            </button>
+
+        </aside>
+
+        <!-- DAFTAR BARANG -->
+
+        <div class="catalog-content">
+
+            <div class="catalog-search">
+
+                <span class="search-icon">⌕</span>
+
+                <input
+                    type="search"
+                    id="searchProduct"
+                    placeholder="Cari perlengkapan camping..."
+                    autocomplete="off"
+                >
+
+            </div>
+
+            <div class="product-grid" id="productGrid">
+
+                <?php if ($query && mysqli_num_rows($query) > 0): ?>
+
+                    <?php while ($barang = mysqli_fetch_assoc($query)): ?>
+
+                        <?php
+                        $namaGambar = basename(
+                            str_replace(
+                                "\\",
+                                "/",
+                                (string) ($barang["gambar"] ?? "")
+                            )
+                        );
+
+                        $lokasiGambar = "../assets/images/" . $namaGambar;
+
+                        $fileGambarAda = (
+                            $namaGambar !== "" &&
+                            is_file(__DIR__ . "/../assets/images/" . $namaGambar)
+                        );
+                        ?>
+
+                        <a
+                            href="detail.php?id=<?= (int) $barang["id_barang"]; ?>"
+                            class="product-card"
+                            data-category="<?= e(formatKategori($barang["nama_kategori"])); ?>"
+                            data-name="<?= e(strtolower($barang["nama_barang"])); ?>"
+                        >
+
+                            <?php if ($fileGambarAda): ?>
+
+                                <img
+                                    src="<?= e($lokasiGambar); ?>"
+                                    alt="<?= e($barang["nama_barang"]); ?>"
+                                    class="product-image"
+                                >
+
+                            <?php else: ?>
+
+                                <div class="image-placeholder">
+                                    Foto belum tersedia
+                                </div>
+
+                            <?php endif; ?>
+
+                            <div class="product-info">
+
+                                <h3>
+                                    <?= e($barang["nama_barang"]); ?>
+                                </h3>
+
+                                <p class="price">
+                                    Rp <?= number_format(
+                                        $barang["harga_sewa"],
+                                        0,
+                                        ",",
+                                        "."
+                                    ); ?> / hari
+                                </p>
+
+                            </div>
+
+                        </a>
+
+                    <?php endwhile; ?>
+
+                <?php else: ?>
+
+                    <p>Belum ada barang yang tersedia.</p>
+
+                <?php endif; ?>
+
+            </div>
+
+            <div class="empty-result" id="emptyResult">
+                <h3>Barang Tidak Ditemukan</h3>
+
+                <p>
+                    Coba gunakan kata kunci lain atau ubah kategori yang dipilih.
+                </p>
+            </div>
+
+        </div>
+
+    </div>
+
 </section>
 
+<!-- ======================================
+     JAVASCRIPT FILTER DAN PENCARIAN
+====================================== -->
+
 <script>
-// Simpan posisi scroll sebelum form dikirim
-document.querySelectorAll('form').forEach(form => {
-    form.addEventListener('submit', function() {
-        sessionStorage.setItem(
-            'posisiScrollKatalog',
-            window.scrollY
+const checkboxes = document.querySelectorAll(".category-checkbox");
+const productCards = document.querySelectorAll(".product-card");
+const resetFilter = document.getElementById("resetFilter");
+const emptyResult = document.getElementById("emptyResult");
+const searchProduct = document.getElementById("searchProduct");
+
+function filterProducts() {
+
+    const kategoriDipilih = Array.from(checkboxes)
+        .filter(checkbox => checkbox.checked)
+        .map(checkbox => checkbox.value);
+
+    const kataKunci = searchProduct.value
+        .trim()
+        .toLowerCase();
+
+    let jumlahTampil = 0;
+
+    productCards.forEach(function(card) {
+
+        const kategoriBarang = card.dataset.category;
+        const namaBarang = card.dataset.name;
+
+        const cocokKategori = (
+            kategoriDipilih.length === 0 ||
+            kategoriDipilih.includes(kategoriBarang)
         );
+
+        const cocokPencarian = namaBarang.includes(kataKunci);
+
+        const cocok = cocokKategori && cocokPencarian;
+
+        card.style.display = cocok ? "" : "none";
+
+        if (cocok) {
+            jumlahTampil++;
+        }
+
     });
+
+    emptyResult.style.display = jumlahTampil === 0 ? "block" : "none";
+}
+
+checkboxes.forEach(function(checkbox) {
+    checkbox.addEventListener("change", filterProducts);
 });
 
-// Kembalikan posisi scroll setelah halaman dimuat
-window.addEventListener('load', function() {
-    const posisi = sessionStorage.getItem('posisiScrollKatalog');
+searchProduct.addEventListener("input", filterProducts);
 
-    if (posisi !== null) {
-        window.scrollTo(0, parseInt(posisi));
-        sessionStorage.removeItem('posisiScrollKatalog');
-    }
+resetFilter.addEventListener("click", function() {
+
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = false;
+    });
+
+    searchProduct.value = "";
+
+    filterProducts();
+
 });
 </script>
+
+<!-- ======================================
+     POPUP NOTIFIKASI GLOBAL
+====================================== -->
+
+<?php include "notifikasi_popup.php"; ?>
 
 </body>
 </html>

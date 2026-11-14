@@ -79,9 +79,33 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <link rel="stylesheet" href="../assets/css/style.css">
 
     <style>
+        body {
+            background-color: transparent;
+            color: #293b30;
+        }
+
+        .register-logo {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 15px auto 0;
+        }
+
+        .register-logo a {
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        .register-logo img {
+            width: 220px;
+            height: 100px;
+            object-fit: contain;
+            display: block;
+        }
+
         .register-container {
             max-width: 500px;
-            margin: 50px auto;
+            margin: 15px auto 50px;
             padding: 30px;
             background: white;
             border-radius: 12px;
@@ -173,10 +197,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         .register-container a {
             color: #31583c;
         }
+
+        @media (max-width: 700px) {
+            .register-logo img {
+                width: 120px;
+                height: 55px;
+            }
+
+            .register-container {
+                width: calc(100% - 30px);
+                margin: 15px auto 40px;
+                padding: 25px 20px;
+                box-sizing: border-box;
+            }
+        }
     </style>
 </head>
 
 <body>
+
+<div class="register-logo">
+    <a href="../index.php">
+        <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+    </a>
+</div>
 
 <div class="register-container">
 
@@ -273,7 +317,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 </div>
 
-
 <script>
 function togglePassword(id, tombol) {
     const input = document.getElementById(id);
@@ -299,14 +342,13 @@ function togglePassword(id, tombol) {
                  stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 3l18 18"/>
                 <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/>
-                <path d="M9.9 5.2A11 11 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3.1 3.8"/>
+                <path d="M9.9 5.2A11 11 0 0 1 12 5c6.5 0 10 7 10 7s-3.5 7-10 7c-1.1 0-2.1-.2-3-.5"/>
                 <path d="M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7c1.1 0 2.1-.2 3-.5"/>
             </svg>
         `;
     }
 }
 </script>
-
 
 </body>
 </html>

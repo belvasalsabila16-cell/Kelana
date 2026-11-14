@@ -76,9 +76,33 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <link rel="stylesheet" href="../assets/css/style.css">
 
     <style>
+        body {
+            background-color: transparent;
+            color: #293b30;
+        }
+
+        .login-logo {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px auto 0;
+        }
+
+        .login-logo img {
+            width: 220px;
+            height: 100px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .login-logo a {
+            display: inline-block;
+            text-decoration: none;
+        }
+
         .login-container {
             max-width: 450px;
-            margin: 60px auto;
+            margin: 20px auto 60px;
             padding: 30px;
             background: white;
             border-radius: 12px;
@@ -156,10 +180,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         .login-container a {
             color: #31583c;
         }
+
+        @media (max-width: 700px) {
+            .login-logo img {
+                width: 120px;
+                height: 55px;
+            }
+
+            .login-container {
+                width: calc(100% - 30px);
+                margin: 15px auto 40px;
+                padding: 25px 20px;
+                box-sizing: border-box;
+            }
+        }
     </style>
 </head>
 
 <body>
+
+<div class="login-logo">
+    <a href="../index.php">
+        <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+    </a>
+</div>
 
 <div class="login-container">
 
@@ -202,7 +246,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     onclick="togglePassword()"
                     aria-label="Tampilkan password">
 
-                <!-- Ikon mata tertutup -->
                 <svg viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="1.8"
                      stroke-linecap="round" stroke-linejoin="round">
@@ -241,7 +284,6 @@ function togglePassword() {
 
     if (input.type === "password") {
 
-        // Tampilkan password dan ubah menjadi mata terbuka
         input.type = "text";
 
         tombol.innerHTML = `
@@ -258,7 +300,6 @@ function togglePassword() {
 
     } else {
 
-        // Sembunyikan password dan ubah menjadi mata tertutup
         input.type = "password";
 
         tombol.innerHTML = `

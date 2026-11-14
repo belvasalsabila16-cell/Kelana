@@ -3,7 +3,10 @@
 session_start();
 include "../config/database.php";
 
-// Pastikan hanya admin yang bisa mengakses
+// ==========================================
+// 1. CEK HAK AKSES ADMIN
+// ==========================================
+
 if (!isset($_SESSION["id_user"])) {
     header("Location: ../auth/login.php");
     exit;
@@ -25,12 +28,18 @@ if (!$dataAdmin || $dataAdmin["role"] !== "admin") {
 $pesan = "";
 $folderGambar = "../assets/images/";
 
-// Pastikan folder gambar tersedia
+// ==========================================
+// 2. FOLDER GAMBAR
+// ==========================================
+
 if (!is_dir($folderGambar)) {
     mkdir($folderGambar, 0777, true);
 }
 
-// Fungsi upload gambar
+// ==========================================
+// 3. FUNGSI UPLOAD GAMBAR
+// ==========================================
+
 function uploadGambar($folderGambar) {
 
     if (
@@ -78,12 +87,19 @@ function uploadGambar($folderGambar) {
     return false;
 }
 
-// Proses tambah, edit, dan hapus
+// ==========================================
+// 4. PROSES TAMBAH, EDIT, NONAKTIFKAN,
+//    DAN AKTIFKAN BARANG
+// ==========================================
+
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $aksi = $_POST["aksi"] ?? "";
 
+    // ======================================
     // TAMBAH BARANG
+    // ======================================
+
     if ($aksi === "tambah") {
 
         $id_kategori = (int) ($_POST["id_kategori"] ?? 0);
@@ -100,15 +116,27 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $stok < 0 ||
             $harga <= 0
         ) {
+
             $pesan = "Lengkapi data barang dengan benar.";
+
         } elseif ($gambar === false) {
+
             $pesan = "Foto gagal diunggah. Gunakan JPG, PNG, atau WEBP maksimal 3 MB.";
+
         } else {
 
             $stmt = mysqli_prepare($conn, "
                 INSERT INTO barang
-                (id_kategori, nama_barang, deskripsi, stok, harga_sewa, gambar)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (
+                    id_kategori,
+                    nama_barang,
+                    deskripsi,
+                    stok,
+                    harga_sewa,
+                    gambar,
+                    status_barang
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 'aktif')
             ");
 
             mysqli_stmt_bind_param(
@@ -123,15 +151,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             );
 
             if (mysqli_stmt_execute($stmt)) {
+
                 header("Location: barang.php?pesan=tambah");
                 exit;
+
             } else {
+
                 $pesan = "Barang gagal ditambahkan.";
+
             }
         }
     }
 
+    // ======================================
     // EDIT BARANG
+    // ======================================
+
     elseif ($aksi === "edit") {
 
         $id_barang = (int) ($_POST["id_barang"] ?? 0);
@@ -142,7 +177,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $harga = (float) ($_POST["harga_sewa"] ?? 0);
 
         $stmtLama = mysqli_prepare($conn, "
-            SELECT gambar FROM barang WHERE id_barang = ?
+            SELECT gambar, status_barang
+            FROM barang
+            WHERE id_barang = ?
         ");
 
         mysqli_stmt_bind_param($stmtLama, "i", $id_barang);
@@ -153,33 +190,44 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         );
 
         if (!$dataLama) {
+
             $pesan = "Data barang tidak ditemukan.";
+
+        } elseif ($dataLama["status_barang"] !== "aktif") {
+
+            $pesan = "Barang nonaktif tidak dapat diedit. Aktifkan barang terlebih dahulu.";
+
         } elseif (
             $nama === "" ||
             $id_kategori <= 0 ||
             $stok < 0 ||
             $harga <= 0
         ) {
+
             $pesan = "Lengkapi data barang dengan benar.";
+
         } else {
 
             $gambarBaru = uploadGambar($folderGambar);
 
             if ($gambarBaru === false) {
+
                 $pesan = "Foto gagal diunggah. Gunakan JPG, PNG, atau WEBP maksimal 3 MB.";
+
             } else {
 
                 $gambar = $gambarBaru ?? $dataLama["gambar"];
 
                 $stmt = mysqli_prepare($conn, "
                     UPDATE barang SET
-                    id_kategori = ?,
-                    nama_barang = ?,
-                    deskripsi = ?,
-                    stok = ?,
-                    harga_sewa = ?,
-                    gambar = ?
+                        id_kategori = ?,
+                        nama_barang = ?,
+                        deskripsi = ?,
+                        stok = ?,
+                        harga_sewa = ?,
+                        gambar = ?
                     WHERE id_barang = ?
+                    AND status_barang = 'aktif'
                 ");
 
                 mysqli_stmt_bind_param(
@@ -196,8 +244,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 if (mysqli_stmt_execute($stmt)) {
 
-                    if ($gambarBaru !== null && !empty($dataLama["gambar"])) {
-                        $gambarLama = $folderGambar . basename($dataLama["gambar"]);
+                    // Hapus foto lama jika diganti
+                    if (
+                        $gambarBaru !== null &&
+                        !empty($dataLama["gambar"])
+                    ) {
+
+                        $gambarLama = $folderGambar .
+                            basename($dataLama["gambar"]);
 
                         if (is_file($gambarLama)) {
                             unlink($gambarLama);
@@ -208,19 +262,26 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     exit;
 
                 } else {
+
                     $pesan = "Data barang gagal diperbarui.";
+
                 }
             }
         }
     }
 
-    // HAPUS BARANG
+    // ======================================
+    // NONAKTIFKAN BARANG
+    // ======================================
+
     elseif ($aksi === "hapus") {
 
         $id_barang = (int) ($_POST["id_barang"] ?? 0);
 
         $stmtCek = mysqli_prepare($conn, "
-            SELECT gambar FROM barang WHERE id_barang = ?
+            SELECT id_barang, status_barang
+            FROM barang
+            WHERE id_barang = ?
         ");
 
         mysqli_stmt_bind_param($stmtCek, "i", $id_barang);
@@ -231,90 +292,161 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         );
 
         if (!$dataBarang) {
+
             $pesan = "Barang tidak ditemukan.";
+
+        } elseif ($dataBarang["status_barang"] === "nonaktif") {
+
+            $pesan = "Barang sudah berstatus nonaktif.";
+
         } else {
 
-            // Periksa apakah barang pernah digunakan dalam booking
-            $stmtDetail = mysqli_prepare($conn, "
-                SELECT COUNT(*) AS total
-                FROM detail_sewa
+            $stmtNonaktif = mysqli_prepare($conn, "
+                UPDATE barang
+                SET status_barang = 'nonaktif'
                 WHERE id_barang = ?
             ");
 
-            mysqli_stmt_bind_param($stmtDetail, "i", $id_barang);
-            mysqli_stmt_execute($stmtDetail);
-
-            $detail = mysqli_fetch_assoc(
-                mysqli_stmt_get_result($stmtDetail)
+            mysqli_stmt_bind_param(
+                $stmtNonaktif,
+                "i",
+                $id_barang
             );
 
-            if ($detail["total"] > 0) {
+            if (mysqli_stmt_execute($stmtNonaktif)) {
 
-                $pesan = "Barang tidak bisa dihapus karena sudah tercatat dalam riwayat penyewaan.";
+                header("Location: barang.php?pesan=nonaktif");
+                exit;
 
             } else {
 
-                $stmtHapus = mysqli_prepare($conn, "
-                    DELETE FROM barang WHERE id_barang = ?
-                ");
+                $pesan = "Barang gagal dinonaktifkan.";
 
-                mysqli_stmt_bind_param($stmtHapus, "i", $id_barang);
+            }
+        }
+    }
 
-                if (mysqli_stmt_execute($stmtHapus)) {
+    // ======================================
+    // AKTIFKAN KEMBALI BARANG
+    // ======================================
 
-                    if (!empty($dataBarang["gambar"])) {
-                        $fileGambar = $folderGambar . basename($dataBarang["gambar"]);
+    elseif ($aksi === "aktifkan") {
 
-                        if (is_file($fileGambar)) {
-                            unlink($fileGambar);
-                        }
-                    }
+        $id_barang = (int) ($_POST["id_barang"] ?? 0);
 
-                    header("Location: barang.php?pesan=hapus");
-                    exit;
+        $stmtCek = mysqli_prepare($conn, "
+            SELECT id_barang, status_barang
+            FROM barang
+            WHERE id_barang = ?
+        ");
 
-                } else {
-                    $pesan = "Barang gagal dihapus.";
-                }
+        mysqli_stmt_bind_param($stmtCek, "i", $id_barang);
+        mysqli_stmt_execute($stmtCek);
+
+        $dataBarang = mysqli_fetch_assoc(
+            mysqli_stmt_get_result($stmtCek)
+        );
+
+        if (!$dataBarang) {
+
+            $pesan = "Barang tidak ditemukan.";
+
+        } elseif ($dataBarang["status_barang"] === "aktif") {
+
+            $pesan = "Barang sudah berstatus aktif.";
+
+        } else {
+
+            $stmtAktif = mysqli_prepare($conn, "
+                UPDATE barang
+                SET status_barang = 'aktif'
+                WHERE id_barang = ?
+            ");
+
+            mysqli_stmt_bind_param(
+                $stmtAktif,
+                "i",
+                $id_barang
+            );
+
+            if (mysqli_stmt_execute($stmtAktif)) {
+
+                header("Location: barang.php?pesan=aktif");
+                exit;
+
+            } else {
+
+                $pesan = "Barang gagal diaktifkan.";
+
             }
         }
     }
 }
 
-// Pesan setelah berhasil
+// ==========================================
+// 5. PESAN SETELAH BERHASIL
+// ==========================================
+
 if (isset($_GET["pesan"])) {
+
     if ($_GET["pesan"] === "tambah") {
         $pesan = "Barang berhasil ditambahkan!";
+
     } elseif ($_GET["pesan"] === "edit") {
         $pesan = "Data barang berhasil diperbarui!";
-    } elseif ($_GET["pesan"] === "hapus") {
-        $pesan = "Barang berhasil dihapus!";
+
+    } elseif ($_GET["pesan"] === "nonaktif") {
+        $pesan = "Barang berhasil dinonaktifkan dan tidak ditampilkan di katalog pelanggan!";
+
+    } elseif ($_GET["pesan"] === "aktif") {
+        $pesan = "Barang berhasil diaktifkan kembali!";
+
     }
 }
 
-// Ambil daftar kategori
+// ==========================================
+// 6. AMBIL DATA KATEGORI
+// ==========================================
+
 $queryKategori = mysqli_query($conn, "
-    SELECT * FROM kategori ORDER BY nama_kategori ASC
+    SELECT * FROM kategori
+    ORDER BY nama_kategori ASC
 ");
 
-// Ambil data barang
+// ==========================================
+// 7. AMBIL SEMUA DATA BARANG
+// TERMASUK BARANG NONAKTIF
+// ==========================================
+
 $queryBarang = mysqli_query($conn, "
     SELECT barang.*, kategori.nama_kategori
     FROM barang
     LEFT JOIN kategori
     ON barang.id_kategori = kategori.id_kategori
-    ORDER BY barang.id_barang DESC
+    ORDER BY
+        CASE
+            WHEN barang.status_barang = 'aktif' THEN 0
+            ELSE 1
+        END,
+        barang.id_barang DESC
 ");
 
-// Ambil data barang untuk diedit
+// ==========================================
+// 8. AMBIL DATA BARANG UNTUK DIEDIT
+// ==========================================
+
 $dataEdit = null;
+$idBarangSedangDiedit = 0;
 
 if (isset($_GET["edit"])) {
 
     $idEdit = (int) $_GET["edit"];
 
     $stmtEdit = mysqli_prepare($conn, "
-        SELECT * FROM barang WHERE id_barang = ?
+        SELECT *
+        FROM barang
+        WHERE id_barang = ?
+        AND status_barang = 'aktif'
     ");
 
     mysqli_stmt_bind_param($stmtEdit, "i", $idEdit);
@@ -323,6 +455,12 @@ if (isset($_GET["edit"])) {
     $dataEdit = mysqli_fetch_assoc(
         mysqli_stmt_get_result($stmtEdit)
     );
+
+    if ($dataEdit) {
+        $idBarangSedangDiedit = (int) $dataEdit["id_barang"];
+    } else {
+        $pesan = "Barang tidak ditemukan atau sudah berstatus nonaktif.";
+    }
 }
 ?>
 
@@ -330,19 +468,21 @@ if (isset($_GET["edit"])) {
 <html lang="id">
 
 <head>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Data Barang - Admin Kelana</title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
 
         body {
             margin: 0;
-            background: #f5f7f3;
+            background: transparent;
             font-family: Arial, sans-serif;
             color: #333;
         }
@@ -360,10 +500,19 @@ if (isset($_GET["edit"])) {
             flex-shrink: 0;
         }
 
-        .sidebar h2 {
-            text-align: center;
-            margin: 0 0 8px;
-            letter-spacing: 2px;
+        .logo-link {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 8px;
+            text-decoration: none;
+        }
+
+        .logo-link img {
+            width: 190px;
+            height: 90px;
+            object-fit: contain;
+            display: block;
         }
 
         .subtitle {
@@ -373,7 +522,7 @@ if (isset($_GET["edit"])) {
             margin-bottom: 35px;
         }
 
-        .sidebar a {
+        .sidebar a:not(.logo-link) {
             display: block;
             color: #e8efe7;
             text-decoration: none;
@@ -383,7 +532,7 @@ if (isset($_GET["edit"])) {
             font-size: 14px;
         }
 
-        .sidebar a:hover,
+        .sidebar a:not(.logo-link):hover,
         .sidebar a.active {
             background: #456e4f;
             color: white;
@@ -495,6 +644,11 @@ if (isset($_GET["edit"])) {
             color: white;
         }
 
+        .btn-activate {
+            background: #31583c;
+            color: white;
+        }
+
         .btn-cancel {
             background: #777;
             color: white;
@@ -520,7 +674,7 @@ if (isset($_GET["edit"])) {
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 850px;
+            min-width: 950px;
         }
 
         th, td {
@@ -551,6 +705,7 @@ if (isset($_GET["edit"])) {
         .action-buttons {
             display: flex;
             gap: 7px;
+            flex-wrap: wrap;
         }
 
         .action-buttons form {
@@ -563,7 +718,66 @@ if (isset($_GET["edit"])) {
             margin-top: 6px;
         }
 
+        /* PENANDA BARANG YANG SEDANG DIEDIT */
+
+        tr.editing-row {
+            background: #e5f1e6;
+        }
+
+        tr.editing-row td {
+            border-bottom: 1px solid #c5ddc7;
+        }
+
+        /* PENANDA STATUS BARANG */
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 11px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: .3px;
+        }
+
+        .status-aktif {
+            background: #e1f3e4;
+            color: #26723a;
+        }
+
+        .status-nonaktif {
+            background: #fde5e5;
+            color: #a32626;
+        }
+
+        tr.inactive-row {
+            background: #fff5f5;
+        }
+
+        tr.inactive-row td {
+            color: #777;
+        }
+
+        tr.inactive-row .product-image {
+            opacity: .65;
+        }
+
+        .status-info {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .status-info span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         @media (max-width: 800px) {
+
             .admin-layout {
                 display: block;
             }
@@ -572,7 +786,12 @@ if (isset($_GET["edit"])) {
                 width: 100%;
             }
 
-            .sidebar a {
+            .logo-link img {
+                width: 150px;
+                height: 75px;
+            }
+
+            .sidebar a:not(.logo-link) {
                 display: inline-block;
                 margin: 3px;
             }
@@ -583,12 +802,15 @@ if (isset($_GET["edit"])) {
         }
 
         @media (max-width: 550px) {
+
             .form-row {
                 grid-template-columns: 1fr;
                 gap: 0;
             }
         }
+
     </style>
+
 </head>
 
 <body>
@@ -596,22 +818,35 @@ if (isset($_GET["edit"])) {
 <div class="admin-layout">
 
     <!-- SIDEBAR -->
+
     <aside class="sidebar">
 
-        <h2>KELANA.</h2>
+        <a href="../index.php" class="logo-link">
+            <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+        </a>
+
         <div class="subtitle">PANEL ADMIN</div>
 
         <a href="dashboard.php">Dashboard</a>
+
         <a href="barang.php" class="active">Data Barang</a>
+
         <a href="kategori.php">Kategori</a>
+
+        <a href="member.php">Manajemen Member</a>
+
         <a href="booking.php">Data Booking</a>
+
         <a href="pengembalian.php">Pengembalian</a>
+
         <a href="faq.php">Kelola FAQ</a>
+
         <a href="laporan.php">Laporan</a>
 
         <a href="../index.php">Lihat Website</a>
 
-        <a href="../auth/logout.php" class="logout"
+        <a href="../auth/logout.php"
+           class="logout"
            onclick="return confirm('Yakin ingin keluar dari akun?')">
             Keluar
         </a>
@@ -619,20 +854,29 @@ if (isset($_GET["edit"])) {
     </aside>
 
     <!-- KONTEN -->
+
     <main class="main-content">
 
         <div class="header">
+
             <h1>Data Barang</h1>
-            <p>Kelola perlengkapan camping yang tersedia di Kelana.</p>
+
+            <p>
+                Kelola perlengkapan camping yang tersedia di Kelana.
+            </p>
+
         </div>
 
         <?php if ($pesan !== "") { ?>
+
             <div class="message">
                 <?php echo htmlspecialchars($pesan); ?>
             </div>
+
         <?php } ?>
 
         <!-- FORM TAMBAH / EDIT -->
+
         <div class="form-container">
 
             <h2>
@@ -641,23 +885,33 @@ if (isset($_GET["edit"])) {
 
             <form method="POST" enctype="multipart/form-data">
 
-                <input type="hidden" name="aksi"
-                       value="<?php echo $dataEdit ? "edit" : "tambah"; ?>">
+                <input
+                    type="hidden"
+                    name="aksi"
+                    value="<?php echo $dataEdit ? "edit" : "tambah"; ?>"
+                >
 
                 <?php if ($dataEdit) { ?>
-                    <input type="hidden" name="id_barang"
-                           value="<?php echo $dataEdit["id_barang"]; ?>">
+
+                    <input
+                        type="hidden"
+                        name="id_barang"
+                        value="<?php echo $dataEdit["id_barang"]; ?>"
+                    >
+
                 <?php } ?>
 
                 <div class="form-group">
 
                     <label>Nama Barang</label>
 
-                    <input type="text"
-                           name="nama_barang"
-                           placeholder="Contoh: Tenda Dome 2 Orang"
-                           value="<?php echo htmlspecialchars($dataEdit["nama_barang"] ?? ""); ?>"
-                           required>
+                    <input
+                        type="text"
+                        name="nama_barang"
+                        placeholder="Contoh: Tenda Dome 2 Orang"
+                        value="<?php echo htmlspecialchars($dataEdit["nama_barang"] ?? ""); ?>"
+                        required
+                    >
 
                 </div>
 
@@ -695,8 +949,10 @@ if (isset($_GET["edit"])) {
 
                     <label>Deskripsi Barang</label>
 
-                    <textarea name="deskripsi"
-                              placeholder="Masukkan deskripsi barang"><?php echo htmlspecialchars($dataEdit["deskripsi"] ?? ""); ?></textarea>
+                    <textarea
+                        name="deskripsi"
+                        placeholder="Masukkan deskripsi barang"
+                    ><?php echo htmlspecialchars($dataEdit["deskripsi"] ?? ""); ?></textarea>
 
                 </div>
 
@@ -706,11 +962,13 @@ if (isset($_GET["edit"])) {
 
                         <label>Stok Barang</label>
 
-                        <input type="number"
-                               name="stok"
-                               min="0"
-                               value="<?php echo htmlspecialchars($dataEdit["stok"] ?? "0"); ?>"
-                               required>
+                        <input
+                            type="number"
+                            name="stok"
+                            min="0"
+                            value="<?php echo htmlspecialchars($dataEdit["stok"] ?? "0"); ?>"
+                            required
+                        >
 
                     </div>
 
@@ -718,11 +976,13 @@ if (isset($_GET["edit"])) {
 
                         <label>Harga Sewa per Hari (Rp)</label>
 
-                        <input type="number"
-                               name="harga_sewa"
-                               min="1"
-                               value="<?php echo htmlspecialchars($dataEdit["harga_sewa"] ?? ""); ?>"
-                               required>
+                        <input
+                            type="number"
+                            name="harga_sewa"
+                            min="1"
+                            value="<?php echo htmlspecialchars($dataEdit["harga_sewa"] ?? ""); ?>"
+                            required
+                        >
 
                     </div>
 
@@ -732,15 +992,20 @@ if (isset($_GET["edit"])) {
 
                     <label>Foto Barang</label>
 
-                    <input type="file"
-                           name="gambar"
-                           accept=".jpg,.jpeg,.png,.webp">
+                    <input
+                        type="file"
+                        name="gambar"
+                        accept=".jpg,.jpeg,.png,.webp"
+                    >
 
                     <p class="hint">
+
                         Format JPG, PNG, atau WEBP. Maksimal 3 MB.
+
                         <?php if ($dataEdit) { ?>
                             Kosongkan jika tidak ingin mengganti foto.
                         <?php } ?>
+
                     </p>
 
                     <?php if ($dataEdit && !empty($dataEdit["gambar"])) { ?>
@@ -750,14 +1015,17 @@ if (isset($_GET["edit"])) {
                         <img
                             src="../assets/images/<?php echo htmlspecialchars(basename($dataEdit["gambar"])); ?>"
                             class="product-image"
-                            alt="Foto barang">
+                            alt="Foto barang"
+                        >
 
                     <?php } ?>
 
                 </div>
 
                 <button type="submit" class="btn btn-primary">
+
                     <?php echo $dataEdit ? "Simpan Perubahan" : "Tambah Barang"; ?>
+
                 </button>
 
                 <?php if ($dataEdit) { ?>
@@ -773,15 +1041,31 @@ if (isset($_GET["edit"])) {
         </div>
 
         <!-- TABEL BARANG -->
+
         <div class="table-container">
 
             <h2>Daftar Barang Kelana</h2>
+
+            <div class="status-info">
+
+                <span>
+                    <span class="status-badge status-aktif">AKTIF</span>
+                    Ditampilkan di katalog pelanggan
+                </span>
+
+                <span>
+                    <span class="status-badge status-nonaktif">NONAKTIF</span>
+                    Tidak ditampilkan di katalog pelanggan
+                </span>
+
+            </div>
 
             <div class="table-responsive">
 
                 <table>
 
                     <thead>
+
                         <tr>
                             <th>No.</th>
                             <th>Foto</th>
@@ -789,8 +1073,10 @@ if (isset($_GET["edit"])) {
                             <th>Kategori</th>
                             <th>Stok</th>
                             <th>Harga per Hari</th>
+                            <th>Status</th>
                             <th>Aksi</th>
                         </tr>
+
                     </thead>
 
                     <tbody>
@@ -801,9 +1087,26 @@ if (isset($_GET["edit"])) {
 
                             <?php while ($barang = mysqli_fetch_assoc($queryBarang)) { ?>
 
-                                <tr>
+                                <?php
+                                $sedangDiedit = (
+                                    $idBarangSedangDiedit > 0 &&
+                                    (int) $barang["id_barang"] === $idBarangSedangDiedit
+                                );
 
-                                    <td><?php echo $no++; ?></td>
+                                $barangNonaktif = (
+                                    $barang["status_barang"] === "nonaktif"
+                                );
+                                ?>
+
+                                <tr class="<?php
+                                    echo $sedangDiedit
+                                        ? 'editing-row'
+                                        : ($barangNonaktif ? 'inactive-row' : '');
+                                ?>">
+
+                                    <td>
+                                        <?php echo $no++; ?>
+                                    </td>
 
                                     <td>
 
@@ -812,11 +1115,14 @@ if (isset($_GET["edit"])) {
                                             <img
                                                 src="../assets/images/<?php echo htmlspecialchars(basename($barang["gambar"])); ?>"
                                                 class="product-image"
-                                                alt="Foto barang">
+                                                alt="Foto barang"
+                                            >
 
                                         <?php } else { ?>
 
-                                            <span class="no-image">Belum ada foto</span>
+                                            <span class="no-image">
+                                                Belum ada foto
+                                            </span>
 
                                         <?php } ?>
 
@@ -836,36 +1142,99 @@ if (isset($_GET["edit"])) {
 
                                     <td>
                                         Rp <?php echo number_format(
-                                            $barang["harga_sewa"], 0, ',', '.'
+                                            $barang["harga_sewa"],
+                                            0,
+                                            ',',
+                                            '.'
                                         ); ?>
+                                    </td>
+
+                                    <td>
+
+                                        <?php if ($barangNonaktif) { ?>
+
+                                            <span class="status-badge status-nonaktif">
+                                                NONAKTIF
+                                            </span>
+
+                                        <?php } else { ?>
+
+                                            <span class="status-badge status-aktif">
+                                                AKTIF
+                                            </span>
+
+                                        <?php } ?>
+
                                     </td>
 
                                     <td>
 
                                         <div class="action-buttons">
 
-                                            <a href="barang.php?edit=<?php echo $barang["id_barang"]; ?>"
-                                               class="btn btn-edit">
-                                                Edit
-                                            </a>
+                                            <?php if (!$barangNonaktif) { ?>
 
-                                            <form method="POST"
-                                                  onsubmit="return confirm('Yakin ingin menghapus barang ini?')">
+                                                <a
+                                                    href="barang.php?edit=<?php echo $barang["id_barang"]; ?>"
+                                                    class="btn btn-edit"
+                                                >
+                                                    Edit
+                                                </a>
 
-                                                <input type="hidden"
-                                                       name="aksi"
-                                                       value="hapus">
+                                                <form
+                                                    method="POST"
+                                                    onsubmit="return confirm('Yakin ingin menonaktifkan barang ini? Barang akan disembunyikan dari katalog pelanggan, tetapi riwayat penyewaan tetap tersimpan.')"
+                                                >
 
-                                                <input type="hidden"
-                                                       name="id_barang"
-                                                       value="<?php echo $barang["id_barang"]; ?>">
+                                                    <input
+                                                        type="hidden"
+                                                        name="aksi"
+                                                        value="hapus"
+                                                    >
 
-                                                <button type="submit"
-                                                        class="btn btn-delete">
-                                                    Hapus
-                                                </button>
+                                                    <input
+                                                        type="hidden"
+                                                        name="id_barang"
+                                                        value="<?php echo $barang["id_barang"]; ?>"
+                                                    >
 
-                                            </form>
+                                                    <button
+                                                        type="submit"
+                                                        class="btn btn-delete"
+                                                    >
+                                                        Nonaktifkan
+                                                    </button>
+
+                                                </form>
+
+                                            <?php } else { ?>
+
+                                                <form
+                                                    method="POST"
+                                                    onsubmit="return confirm('Yakin ingin mengaktifkan kembali barang ini? Barang akan muncul kembali di katalog pelanggan.')"
+                                                >
+
+                                                    <input
+                                                        type="hidden"
+                                                        name="aksi"
+                                                        value="aktifkan"
+                                                    >
+
+                                                    <input
+                                                        type="hidden"
+                                                        name="id_barang"
+                                                        value="<?php echo $barang["id_barang"]; ?>"
+                                                    >
+
+                                                    <button
+                                                        type="submit"
+                                                        class="btn btn-activate"
+                                                    >
+                                                        Aktifkan
+                                                    </button>
+
+                                                </form>
+
+                                            <?php } ?>
 
                                         </div>
 
@@ -878,9 +1247,11 @@ if (isset($_GET["edit"])) {
                         <?php } else { ?>
 
                             <tr>
-                                <td colspan="7" style="text-align:center;">
+
+                                <td colspan="8" style="text-align:center;">
                                     Belum ada data barang.
                                 </td>
+
                             </tr>
 
                         <?php } ?>

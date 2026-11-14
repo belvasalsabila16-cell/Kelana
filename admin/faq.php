@@ -24,7 +24,7 @@ if (!$dataRole || !in_array($dataRole["role"], ["admin", "pemilik"])) {
 }
 
 // ==========================================
-// 2. PROSES TAMBAH FAQ
+// 2. PROSES TAMBAH, EDIT, DAN HAPUS FAQ
 // ==========================================
 $pesan = "";
 $jenisPesan = "success";
@@ -32,6 +32,7 @@ $jenisPesan = "success";
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $aksi = $_POST["aksi"] ?? "";
 
+    // TAMBAH FAQ
     if ($aksi === "tambah") {
         $pertanyaan = trim($_POST["pertanyaan"] ?? "");
         $jawaban = trim($_POST["jawaban"] ?? "");
@@ -56,9 +57,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
     }
 
-    // ======================================
-    // 3. PROSES EDIT FAQ
-    // ======================================
+    // EDIT FAQ
     if ($aksi === "edit") {
         $idFaq = (int) ($_POST["id_faq"] ?? 0);
         $pertanyaan = trim($_POST["pertanyaan"] ?? "");
@@ -90,9 +89,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
     }
 
-    // ======================================
-    // 4. PROSES HAPUS FAQ
-    // ======================================
+    // HAPUS FAQ
     if ($aksi === "hapus") {
         $idFaq = (int) ($_POST["id_faq"] ?? 0);
 
@@ -115,7 +112,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 // ==========================================
-// 5. NOTIFIKASI
+// 3. NOTIFIKASI
 // ==========================================
 if (isset($_GET["pesan"])) {
     if ($_GET["pesan"] === "tambah") {
@@ -128,7 +125,7 @@ if (isset($_GET["pesan"])) {
 }
 
 // ==========================================
-// 6. AMBIL DATA FAQ UNTUK DIEDIT
+// 4. AMBIL DATA FAQ UNTUK DIEDIT
 // ==========================================
 $dataEdit = null;
 
@@ -147,7 +144,7 @@ if (isset($_GET["edit"])) {
 }
 
 // ==========================================
-// 7. AMBIL SELURUH DATA FAQ
+// 5. AMBIL SELURUH DATA FAQ
 // ==========================================
 $daftarFaq = mysqli_query(
     $conn,
@@ -166,6 +163,8 @@ function e($nilai) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kelola FAQ - Kelana</title>
 
+    <link rel="stylesheet" href="../assets/css/style.css">
+
     <style>
         * {
             box-sizing: border-box;
@@ -175,43 +174,64 @@ function e($nilai) {
         }
 
         body {
-            background: #f4f6f4;
+            background: transparent;
             color: #26352c;
         }
 
+        /* SIDEBAR */
         .sidebar {
-            width: 240px;
+            width: 245px;
             height: 100vh;
-            background: #244b38;
+            background: #31583c;
             color: white;
             position: fixed;
+            top: 0;
+            left: 0;
             padding: 28px 18px;
+            overflow-y: auto;
+            z-index: 100;
         }
 
         .logo {
-            font-size: 25px;
-            font-weight: bold;
-            margin: 0 12px 35px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
         }
 
-        .sidebar a {
+        .logo a {
+            display: inline-block;
+        }
+
+        .logo img {
+            width: 190px;
+            height: 90px;
+            object-fit: contain;
             display: block;
-            color: white;
+        }
+
+        .sidebar a.menu-link {
+            display: block;
+            color: #e8efe7;
             text-decoration: none;
             padding: 13px 14px;
             border-radius: 7px;
             margin-bottom: 7px;
             font-size: 14px;
+            transition: 0.2s;
         }
 
-        .sidebar a:hover,
-        .sidebar a.aktif {
-            background: #3d6a50;
+        .sidebar a.menu-link:hover,
+        .sidebar a.menu-link.aktif {
+            background: #456e4f;
+            color: white;
         }
 
+        /* KONTEN UTAMA */
         .main {
-            margin-left: 240px;
+            margin-left: 245px;
             padding: 35px;
+            min-height: 100vh;
         }
 
         .header {
@@ -221,31 +241,36 @@ function e($nilai) {
         .header h1 {
             font-size: 27px;
             margin-bottom: 8px;
+            color: #26352d;
         }
 
         .header p {
-            color: #718078;
+            color: #77847b;
             font-size: 14px;
         }
 
+        /* CARD */
         .card {
             background: white;
             padding: 25px;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
             margin-bottom: 25px;
         }
 
         .card h2 {
             font-size: 19px;
             margin-bottom: 20px;
+            color: #26352d;
         }
 
+        /* FORM */
         label {
             display: block;
             font-weight: bold;
             font-size: 14px;
             margin-bottom: 8px;
+            color: #405448;
         }
 
         input,
@@ -256,6 +281,14 @@ function e($nilai) {
             border-radius: 7px;
             margin-bottom: 17px;
             font-size: 14px;
+            color: #26352c;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #456e4f;
+            box-shadow: 0 0 0 2px rgba(69, 110, 79, 0.1);
         }
 
         textarea {
@@ -263,6 +296,7 @@ function e($nilai) {
             resize: vertical;
         }
 
+        /* TOMBOL */
         button,
         .btn {
             border: none;
@@ -275,8 +309,12 @@ function e($nilai) {
         }
 
         .btn-simpan {
-            background: #315d43;
+            background: #31583c;
             color: white;
+        }
+
+        .btn-simpan:hover {
+            background: #456e4f;
         }
 
         .btn-batal {
@@ -285,14 +323,26 @@ function e($nilai) {
             margin-left: 5px;
         }
 
+        .btn-batal:hover {
+            background: #dce4dd;
+        }
+
         .btn-edit {
             background: #e5eee8;
             color: #28523a;
         }
 
+        .btn-edit:hover {
+            background: #d5e5d9;
+        }
+
         .btn-hapus {
             background: #fbe9e7;
             color: #b13b32;
+        }
+
+        .btn-hapus:hover {
+            background: #f5d8d5;
         }
 
         .aksi {
@@ -301,6 +351,7 @@ function e($nilai) {
             flex-wrap: wrap;
         }
 
+        /* TABEL */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -317,10 +368,15 @@ function e($nilai) {
         }
 
         th {
-            background: #f5f8f5;
+            background: #f1f5ef;
+            color: #31583c;
+        }
+
+        td {
             color: #405448;
         }
 
+        /* NOTIFIKASI */
         .alert {
             padding: 13px 16px;
             border-radius: 7px;
@@ -344,17 +400,36 @@ function e($nilai) {
             padding: 25px;
         }
 
-        @media(max-width: 800px) {
+        /* RESPONSIVE */
+        @media (max-width: 800px) {
             .sidebar {
                 width: 100%;
                 height: auto;
                 position: relative;
+                padding: 18px;
+            }
+
+            .logo {
+                margin-bottom: 15px;
+            }
+
+            .logo img {
+                width: 150px;
+                height: 75px;
+            }
+
+            .sidebar a.menu-link {
+                padding: 11px 12px;
             }
 
             .main {
                 margin-left: 0;
                 padding: 20px;
                 overflow-x: auto;
+            }
+
+            .card {
+                padding: 18px;
             }
         }
     </style>
@@ -363,16 +438,23 @@ function e($nilai) {
 <body>
 
 <aside class="sidebar">
-    <div class="logo">KELANA.</div>
 
-    <a href="dashboard.php">Dashboard</a>
-    <a href="barang.php">Data Barang</a>
-    <a href="kategori.php">Kategori</a>
-    <a href="booking.php">Data Booking</a>
-    <a href="pengembalian.php">Pengembalian</a>
-    <a href="faq.php" class="aktif">FAQ</a>
-    <a href="laporan.php">Laporan</a>
-    <a href="../index.php">Lihat Website</a>
+    <div class="logo">
+        <a href="../index.php">
+            <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+        </a>
+    </div>
+
+    <a href="dashboard.php" class="menu-link">Dashboard</a>
+    <a href="barang.php" class="menu-link">Data Barang</a>
+    <a href="kategori.php" class="menu-link">Kategori</a>
+    <a href="member.php" class="menu-link">Manajemen Member</a>
+    <a href="booking.php" class="menu-link">Data Booking</a>
+    <a href="pengembalian.php" class="menu-link">Pengembalian</a>
+    <a href="faq.php" class="menu-link aktif">FAQ</a>
+    <a href="laporan.php" class="menu-link">Laporan</a>
+    <a href="../index.php" class="menu-link">Lihat Website</a>
+
 </aside>
 
 <main class="main">
@@ -389,9 +471,13 @@ function e($nilai) {
     <?php endif; ?>
 
     <section class="card">
-        <h2><?= $dataEdit ? "Edit Pertanyaan" : "Tambah Pertanyaan Baru" ?></h2>
+
+        <h2>
+            <?= $dataEdit ? "Edit Pertanyaan" : "Tambah Pertanyaan Baru" ?>
+        </h2>
 
         <form method="POST">
+
             <input
                 type="hidden"
                 name="aksi"
@@ -407,6 +493,7 @@ function e($nilai) {
             <?php endif; ?>
 
             <label>Pertanyaan</label>
+
             <input
                 type="text"
                 name="pertanyaan"
@@ -416,6 +503,7 @@ function e($nilai) {
             >
 
             <label>Jawaban</label>
+
             <textarea
                 name="jawaban"
                 placeholder="Masukkan jawaban"
@@ -429,14 +517,19 @@ function e($nilai) {
             <?php if ($dataEdit): ?>
                 <a href="faq.php" class="btn btn-batal">Batal</a>
             <?php endif; ?>
+
         </form>
+
     </section>
 
     <section class="card">
+
         <h2>Daftar Pertanyaan</h2>
 
-        <div style="overflow-x:auto;">
+        <div style="overflow-x: auto;">
+
             <table>
+
                 <thead>
                     <tr>
                         <th width="60">No.</th>
@@ -447,46 +540,80 @@ function e($nilai) {
                 </thead>
 
                 <tbody>
+
                     <?php if (mysqli_num_rows($daftarFaq) > 0): ?>
+
                         <?php $no = 1; ?>
+
                         <?php while ($faq = mysqli_fetch_assoc($daftarFaq)): ?>
+
                             <tr>
                                 <td><?= $no++ ?></td>
-                                <td><?= nl2br(e($faq["pertanyaan"])) ?></td>
-                                <td><?= nl2br(e($faq["jawaban"])) ?></td>
+
+                                <td>
+                                    <?= nl2br(e($faq["pertanyaan"])) ?>
+                                </td>
+
+                                <td>
+                                    <?= nl2br(e($faq["jawaban"])) ?>
+                                </td>
+
                                 <td>
                                     <div class="aksi">
+
                                         <a
                                             href="faq.php?edit=<?= (int) $faq["id_faq"] ?>"
                                             class="btn btn-edit"
                                         >Edit</a>
 
-                                        <form method="POST"
-                                              onsubmit="return confirm('Yakin ingin menghapus FAQ ini?');">
-                                            <input type="hidden" name="aksi" value="hapus">
+                                        <form
+                                            method="POST"
+                                            onsubmit="return confirm('Yakin ingin menghapus FAQ ini?');"
+                                        >
+
+                                            <input
+                                                type="hidden"
+                                                name="aksi"
+                                                value="hapus"
+                                            >
+
                                             <input
                                                 type="hidden"
                                                 name="id_faq"
                                                 value="<?= (int) $faq["id_faq"] ?>"
                                             >
-                                            <button type="submit" class="btn-hapus">
+
+                                            <button
+                                                type="submit"
+                                                class="btn-hapus"
+                                            >
                                                 Hapus
                                             </button>
+
                                         </form>
+
                                     </div>
                                 </td>
                             </tr>
+
                         <?php endwhile; ?>
+
                     <?php else: ?>
+
                         <tr>
                             <td colspan="4" class="kosong">
                                 Belum ada pertanyaan FAQ.
                             </td>
                         </tr>
+
                     <?php endif; ?>
+
                 </tbody>
+
             </table>
+
         </div>
+
     </section>
 
 </main>
