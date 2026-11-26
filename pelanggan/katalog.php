@@ -1,4 +1,6 @@
+
 <?php
+
 session_start();
 
 include_once "../config/database.php";
@@ -70,13 +72,13 @@ if (!isset($_SESSION["keranjang"])) {
 // 3. CEK TANGGAL PENYEWAAN
 // ==========================================
 
-if (
-    empty($_SESSION["tanggal_mulai"]) ||
-    empty($_SESSION["tanggal_selesai"])
-) {
-    header("Location: pilih_tanggal.php");
-    exit;
-}
+// Pengunjung boleh melihat katalog tanpa memilih tanggal.
+// Informasi periode hanya ditampilkan jika tanggal sudah dipilih.
+
+$adaPeriodeSewa = (
+    !empty($_SESSION["tanggal_mulai"]) &&
+    !empty($_SESSION["tanggal_selesai"])
+);
 
 // ==========================================
 // 4. AMBIL DATA KATEGORI BARANG AKTIF
@@ -109,16 +111,23 @@ $query = mysqli_query($conn, "
 // 6. HITUNG INFORMASI PENYEWAAN
 // ==========================================
 
-$tanggalMulai = new DateTime($_SESSION["tanggal_mulai"]);
-$tanggalSelesai = new DateTime($_SESSION["tanggal_selesai"]);
+$tanggalMulai = null;
+$tanggalSelesai = null;
+$durasiSewa = 0;
+$batasPengembalian = null;
 
-$durasiSewa = $tanggalMulai->diff($tanggalSelesai)->days + 1;
+if ($adaPeriodeSewa) {
+    $tanggalMulai = new DateTime($_SESSION["tanggal_mulai"]);
+    $tanggalSelesai = new DateTime($_SESSION["tanggal_selesai"]);
 
-if (!empty($_SESSION["batas_pengembalian"])) {
-    $batasPengembalian = new DateTime($_SESSION["batas_pengembalian"]);
-} else {
-    $batasPengembalian = clone $tanggalSelesai;
-    $batasPengembalian->modify("+2 days");
+    $durasiSewa = $tanggalMulai->diff($tanggalSelesai)->days + 1;
+
+    if (!empty($_SESSION["batas_pengembalian"])) {
+        $batasPengembalian = new DateTime($_SESSION["batas_pengembalian"]);
+    } else {
+        $batasPengembalian = clone $tanggalSelesai;
+        $batasPengembalian->modify("+2 days");
+    }
 }
 
 ?>
@@ -659,8 +668,12 @@ if (!empty($_SESSION["batas_pengembalian"])) {
      INFORMASI PERIODE PENYEWAAN
 ====================================== -->
 
+<?php if ($adaPeriodeSewa): ?>
+
 <div class="rental-period">
+
     <div>
+
         <small>Periode Penyewaan</small>
 
         <h3>
@@ -670,6 +683,7 @@ if (!empty($_SESSION["batas_pengembalian"])) {
         </h3>
 
         <div class="rental-info">
+
             <p>
                 <strong>Durasi:</strong>
                 <?= $durasiSewa; ?> hari
@@ -683,13 +697,17 @@ if (!empty($_SESSION["batas_pengembalian"])) {
             <p>
                 Pengembalian sampai tanggal tersebut tidak dikenakan denda.
             </p>
+
         </div>
     </div>
 
     <a href="pilih_tanggal.php" class="detail-btn">
         ← Ubah Tanggal
     </a>
+
 </div>
+
+<?php endif; ?>
 
 <!-- ======================================
      NAVBAR KELANA
@@ -773,6 +791,7 @@ if (!empty($_SESSION["batas_pengembalian"])) {
                 <summary>
 
                     <span class="profile-circle">
+
                         <svg viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" stroke-width="1.7"
                              stroke-linecap="round" stroke-linejoin="round">
@@ -781,6 +800,7 @@ if (!empty($_SESSION["batas_pengembalian"])) {
                             <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>
 
                         </svg>
+
                     </span>
 
                     <span class="account-label">Akun</span>
@@ -905,6 +925,7 @@ if (!empty($_SESSION["batas_pengembalian"])) {
                     <?php while ($barang = mysqli_fetch_assoc($query)): ?>
 
                         <?php
+
                         $namaGambar = basename(
                             str_replace(
                                 "\\",
@@ -919,6 +940,7 @@ if (!empty($_SESSION["batas_pengembalian"])) {
                             $namaGambar !== "" &&
                             is_file(__DIR__ . "/../assets/images/" . $namaGambar)
                         );
+
                         ?>
 
                         <a
@@ -992,6 +1014,7 @@ if (!empty($_SESSION["batas_pengembalian"])) {
 ====================================== -->
 
 <script>
+
 const checkboxes = document.querySelectorAll(".category-checkbox");
 const productCards = document.querySelectorAll(".product-card");
 const resetFilter = document.getElementById("resetFilter");
@@ -1052,6 +1075,7 @@ resetFilter.addEventListener("click", function() {
     filterProducts();
 
 });
+
 </script>
 
 <!-- ======================================

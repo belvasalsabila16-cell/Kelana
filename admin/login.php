@@ -1,10 +1,10 @@
-
 <?php
 session_start();
 include "../config/database.php";
 
 // Jika sudah login sebagai admin, langsung ke dashboard
 if (isset($_SESSION["id_user"])) {
+
     $idUser = (int) $_SESSION["id_user"];
 
     $cek = mysqli_query(
@@ -32,38 +32,47 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email = trim($_POST["email"] ?? "");
     $password = $_POST["password"] ?? "";
 
-    $stmt = mysqli_prepare(
-        $conn,
-        "SELECT * FROM user WHERE email = ? AND role = 'admin'"
-    );
+    if ($email === "" || $password === "") {
 
-    mysqli_stmt_bind_param($stmt, "s", $email);
-    mysqli_stmt_execute($stmt);
+        $pesan = "Email dan password wajib diisi.";
 
-    $hasil = mysqli_stmt_get_result($stmt);
+    } else {
 
-    if ($user = mysqli_fetch_assoc($hasil)) {
+        $query = mysqli_prepare($conn, "
+            SELECT * FROM `user`
+            WHERE email = ? AND role = 'admin'
+        ");
 
-        if (password_verify($password, $user["password"])) {
+        mysqli_stmt_bind_param($query, "s", $email);
+        mysqli_stmt_execute($query);
 
-            session_regenerate_id(true);
+        $hasil = mysqli_stmt_get_result($query);
 
-            $_SESSION["id_user"] = $user["id_user"];
-            $_SESSION["nama"] = $user["nama"];
-            $_SESSION["email"] = $user["email"];
+        if (mysqli_num_rows($hasil) === 1) {
 
-            header("Location: dashboard.php");
-            exit;
+            $user = mysqli_fetch_assoc($hasil);
+
+            if (password_verify($password, $user["password"])) {
+
+                session_regenerate_id(true);
+
+                $_SESSION["id_user"] = $user["id_user"];
+                $_SESSION["nama"] = $user["nama"];
+                $_SESSION["email"] = $user["email"];
+
+                header("Location: dashboard.php");
+                exit;
+
+            } else {
+                $pesan = "Email atau password admin salah.";
+            }
 
         } else {
             $pesan = "Email atau password admin salah.";
         }
 
-    } else {
-        $pesan = "Email atau password admin salah.";
+        mysqli_stmt_close($query);
     }
-
-    mysqli_stmt_close($stmt);
 }
 ?>
 
@@ -79,33 +88,58 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <link rel="stylesheet" href="../assets/css/style.css">
 
     <style>
+
         body {
-            background: #f4f6f3;
+            background-color: transparent;
+            color: #293b30;
         }
 
-        .login-box {
-            max-width: 420px;
-            margin: 80px auto;
+        /* LOGO */
+        .login-logo {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px auto 0;
+        }
+
+        .login-logo img {
+            width: 220px;
+            height: 100px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .login-logo a {
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        /* CONTAINER LOGIN */
+        .login-container {
+            max-width: 450px;
+            margin: 20px auto 60px;
             padding: 30px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 3px 15px rgba(0,0,0,.1);
         }
 
-        .login-box h1 {
+        .login-container h1 {
             text-align: center;
             color: #31583c;
         }
 
-        .login-box input {
+        /* INPUT */
+        .login-container input {
             width: 100%;
             padding: 12px;
-            margin: 8px 0 18px;
-            box-sizing: border-box;
+            margin: 8px 0 15px;
             border: 1px solid #ccc;
             border-radius: 6px;
+            box-sizing: border-box;
         }
 
+        /* PASSWORD */
         .password-wrapper {
             position: relative;
             width: 100%;
@@ -116,6 +150,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             width: 100%;
             padding: 12px 45px 12px 12px;
             margin: 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
             box-sizing: border-box;
         }
 
@@ -124,9 +160,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             right: 12px;
             top: 50%;
             transform: translateY(-50%);
-            width: auto;
-            padding: 4px;
-            margin: 0;
             border: none;
             background: transparent;
             color: #888;
@@ -134,11 +167,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 4px;
         }
 
         .toggle-password:hover {
             background: transparent;
-            color: #31583c;
         }
 
         .toggle-password svg {
@@ -146,7 +179,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             height: 20px;
         }
 
-        .login-box button[type="submit"] {
+        /* TOMBOL MASUK */
+        .login-container button[type="submit"] {
             width: 100%;
             padding: 13px;
             background: #31583c;
@@ -156,30 +190,56 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             cursor: pointer;
         }
 
-        .login-box button[type="submit"]:hover {
+        .login-container button[type="submit"]:hover {
             background: #25452e;
         }
 
+        /* PESAN ERROR */
         .pesan {
             color: #a33;
-            text-align: center;
             margin-bottom: 15px;
+            text-align: center;
         }
 
-        .login-box a {
+        .login-container a {
             color: #31583c;
         }
+
+        /* RESPONSIVE */
+        @media (max-width: 700px) {
+
+            .login-logo img {
+                width: 120px;
+                height: 55px;
+            }
+
+            .login-container {
+                width: calc(100% - 30px);
+                margin: 15px auto 40px;
+                padding: 25px 20px;
+                box-sizing: border-box;
+            }
+        }
+
     </style>
 </head>
 
 <body>
 
-<div class="login-box">
+<!-- LOGO KELANA -->
+<div class="login-logo">
+    <a href="../index.php">
+        <img src="../assets/images/logo-kelana.png" alt="Logo KELANA">
+    </a>
+</div>
 
-    <h1>Login Admin Kelana</h1>
+<!-- FORM LOGIN ADMIN -->
+<div class="login-container">
 
-    <p style="text-align:center">
-        Silakan masuk ke panel administrator.
+    <h1>Masuk ke Kelana</h1>
+
+    <p style="text-align:center;">
+        Silakan masuk menggunakan akun administrator Kelana.
     </p>
 
     <?php if ($pesan !== "") { ?>
@@ -218,13 +278,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 aria-label="Tampilkan password"
             >
 
-                <!-- Ikon mata dicoret -->
-                <svg viewBox="0 0 24 24"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="1.8"
-                     stroke-linecap="round"
-                     stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round">
 
                     <path d="M3 3l18 18"/>
                     <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/>
@@ -241,15 +297,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         </div>
 
-        <button type="submit">
-            Masuk sebagai Admin
-        </button>
+        <button type="submit">Masuk sebagai Admin</button>
 
     </form>
+
+    <p style="text-align:center; margin-top:20px;">
+        <a href="../index.php">Kembali ke Beranda</a>
+    </p>
 
 </div>
 
 <script>
+
 function togglePassword() {
 
     const input = document.getElementById("password");
@@ -257,17 +316,12 @@ function togglePassword() {
 
     if (input.type === "password") {
 
-        // Tampilkan password
         input.type = "text";
 
-        // Ikon mata terbuka
         tombol.innerHTML = `
-            <svg viewBox="0 0 24 24"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="1.8"
-                 stroke-linecap="round"
-                 stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round">
 
                 <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
                 <circle cx="12" cy="12" r="3"/>
@@ -280,17 +334,12 @@ function togglePassword() {
 
     } else {
 
-        // Sembunyikan password
         input.type = "password";
 
-        // Ikon mata dicoret
         tombol.innerHTML = `
-            <svg viewBox="0 0 24 24"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="1.8"
-                 stroke-linecap="round"
-                 stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round">
 
                 <path d="M3 3l18 18"/>
                 <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/>
@@ -308,6 +357,7 @@ function togglePassword() {
         tombol.style.color = "#888";
     }
 }
+
 </script>
 
 </body>
